@@ -1,0 +1,173 @@
+####################################################################
+# Centralizuota žurnalų analizės ir anomalijų aptikimo sistema
+# mažoms organizacijoms
+#
+# Stack: syslog-ng → Promtail → Loki → Grafana + Python anomaly detector
+#
+# Portai:
+#   514/TCP,UDP  - syslog priėmimas (iš tinklo įrenginių, serverių)
+#   3100         - Loki API (vidinis, Promtail → Loki)
+#   3000         - Grafana web UI
+####################################################################
+
+services:
+
+  # ============================================================
+  # 1. SYSLOG-NG - Centrinis žurnalų kolektorius
+  #    Priima syslog žinutes per TCP/UDP iš viso tinklo
+  # ============================================================
+  syslog-ng:
+    image: balabit/syslog-ng:4.8.3
+    container_name: syslog-ng
+    restart: unless-stopped
+    ports:
+      - "514:514/udp"     # Syslog UDP (tinklo įrenginiai, Linux rsyslog)
+      - "514:514/tcp"     # Syslog TCP (patikimesnis transportas)
+      - "1514:1514/tcp"   # Alternatyvus portas (jei 514 užimtas)
+    volumes:
+      - ./config/syslog-ng/syslog-ng.conf:/etc/syslog-ng/syslog-ng.conf:ro
+      - syslog-ng-logs:/var/log/syslog-ng
+    networks:
+      - lognet
+    healthcheck:
+      test: ["CMD", "syslog-ng-ctl", "stats"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # ============================================================
+  # 2. PROMTAIL - Logų siuntėjas į Loki
+  #    Priima iš syslog-ng per syslog protokolą,
+  #    prideda labels ir siunčia į Loki
+  # ============================================================
+  promtail:
+    image: grafana/promtail:3.4.2
+    container_name: promtail
+    restart: unless-stopped
+    volumes:
+      - ./config/promtail/promtail.yml:/etc/promtail/config.yml:ro
+      - syslog-ng-logs:/var/log/syslog-ng:ro
+      - promtail-positions:/var/lib/promtail
+    networks:
+      - lognet
+    depends_on:
+      - loki
+      - syslog-ng
+
+  # ============================================================
+  # 3. LOKI - Žurnalų saugykla
+  #    Lengva, indeksuoja tik metaduomenis (labels),
+  #    pats turinys saugomas efektyviai
+  # ============================================================
+  loki:
+    image: grafana/loki:3.4.2
+    container_name: loki
+    restart: unless-stopped
+    volumes:
+      - ./config/loki/loki.yml:/etc/loki/local-config.yaml:ro
+      - loki-data:/loki
+    command: -config.file=/etc/loki/local-config.yaml
+    networks:
+      - lognet
+    healthcheck:
+      test: ["CMD-SHELL", "wget --no-verbose --tries=1 --spider http://localhost:3100/ready || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+
+  # ============================================================
+  # 4. GRAFANA - Vizualizacija ir alertai
+  #    Web dashboard, Loki data source automatiškai sukonfigūruotas
+  # ============================================================
+  grafana:
+    image: grafana/grafana:11.5.2
+    container_name: grafana
+    restart: unless-stopped
+    ports:
+      - "3000:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=${GF_SECURITY_ADMIN_PASSWORD}
+      - GF_USERS_ALLOW_SIGN_UP=false
+      - GF_ALERTING_ENABLED=true
+      - GF_UNIFIED_ALERTING_ENABLED=true
+    volumes:
+      - ./config/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./config/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    networks:
+      - lognet
+    depends_on:
+      - loki
+
+  # ============================================================
+  # 5. ANOMALY DETECTOR - Python anomalijų aptikimo modulis
+  #    Periodiškai query'ina Loki API, analizuoja logus,
+  #    siunčia alertus
+  # ============================================================
+  anomaly-detector:
+    build:
+      context: ./anomaly-detector
+      dockerfile: Dockerfile
+    container_name: anomaly-detector
+    restart: unless-stopped
+    environment:
+      - LOKI_URL=http://loki:3100
+      - CHECK_INTERVAL=60          # Tikrinimo intervalas sekundėmis
+      - SSH_BRUTE_THRESHOLD=5      # Max nesėkmingų SSH per langą
+      - LOG_SPIKE_MULTIPLIER=3.0   # Kiek kartų viršyti vidurkį = spike
+      - ALERT_WEBHOOK_URL=         # Telegram/Slack webhook (optional)
+    volumes:
+      - ./anomaly-detector:/app:ro
+      - anomaly-data:/data
+    networks:
+      - lognet
+    depends_on:
+      loki:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD-SHELL", "test -f /tmp/detector.alive && [ $(( $(date +%s) - $(stat -c %Y /tmp/detector.alive) )) -lt 120 ] || exit 1"]
+      interval: 60s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+
+  # ============================================================
+  # 6. LOG GENERATOR - Testinių logų generatorius (DEV ONLY)
+  #    Generuoja realistiškus logus testavimui
+  #    Pašalinti production aplinkoje!
+  # ============================================================
+  log-generator:
+    build:
+      context: ./log-generator
+      dockerfile: Dockerfile
+    container_name: log-generator
+    restart: unless-stopped
+    environment:
+      - SYSLOG_HOST=syslog-ng
+      - SYSLOG_PORT=514
+    networks:
+      - lognet
+    depends_on:
+      - syslog-ng
+    profiles:
+      - dev   # Paleidžiamas tik su: docker compose --profile dev up
+
+# ============================================================
+# TINKLAI IR VOLUMES
+# ============================================================
+networks:
+  lognet:
+    driver: bridge
+
+volumes:
+  loki-data:
+    driver: local
+  grafana-data:
+    driver: local
+  syslog-ng-logs:
+    driver: local
+  anomaly-data:
+    driver: local
+  promtail-positions:
+    driver: local

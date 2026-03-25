@@ -1,0 +1,89 @@
+####################################################################
+# Grafana automatiškai sukonfigūruoti alertai
+# Tikrina saugumo įvykius realiu laiku
+####################################################################
+
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: security-alerts
+    folder: Security
+    interval: 1m
+    rules:
+
+      # ---- SSH brute-force atakos aptikimas ----
+      - uid: ssh-bruteforce-alert
+        title: "SSH Brute-Force Aptiktas"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki
+            model:
+              expr: 'sum(count_over_time({job="syslog"} |= "Failed password" [5m]))'
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: "__expr__"
+            model:
+              conditions:
+                - evaluator:
+                    params: [5]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    type: last
+                  type: query
+              refId: C
+              type: classic_conditions
+        noDataState: NoData
+        execErrState: Alerting
+        for: 2m
+        labels:
+          severity: high
+        annotations:
+          summary: "SSH brute-force ataka aptikta — daugiau nei 5 nesėkmingi bandymai per 5 min"
+
+      # ---- Firewall blokavimų šuolis ----
+      - uid: firewall-spike-alert
+        title: "Firewall Blokavimų Šuolis"
+        condition: C
+        data:
+          - refId: A
+            relativeTimeRange:
+              from: 300
+              to: 0
+            datasourceUid: loki
+            model:
+              expr: 'sum(count_over_time({job="syslog"} |~ "DROP|REJECT|blocked" [5m]))'
+              instant: true
+              refId: A
+          - refId: C
+            datasourceUid: "__expr__"
+            model:
+              conditions:
+                - evaluator:
+                    params: [50]
+                    type: gt
+                  operator:
+                    type: and
+                  query:
+                    params: [A]
+                  reducer:
+                    type: last
+                  type: query
+              refId: C
+              type: classic_conditions
+        noDataState: NoData
+        execErrState: Alerting
+        for: 1m
+        labels:
+          severity: medium
+        annotations:
+          summary: "Neįprastai daug ugniasienės blokavimų — daugiau nei 50 per 5 min"

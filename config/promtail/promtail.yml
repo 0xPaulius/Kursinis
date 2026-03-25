@@ -1,0 +1,83 @@
+####################################################################
+# Promtail konfigūracija
+# Skaito syslog-ng rašomus failus ir siunčia į Loki
+# Prideda labels (host, job, severity) efektyviam filtravimui
+####################################################################
+
+server:
+  http_listen_port: 9080
+  grpc_listen_port: 0
+
+positions:
+  filename: /var/lib/promtail/positions.yaml
+
+clients:
+  - url: http://loki:3100/loki/api/v1/push
+    batchwait: 1s
+    batchsize: 1048576    # 1MB
+
+scrape_configs:
+
+  # ---- Visi logai ----
+  - job_name: all_logs
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: syslog
+          __path__: /var/log/syslog-ng/all.log
+    pipeline_stages:
+      # Parserinam syslog-ng šablono formatą:
+      # 2024-01-15T10:30:00+02:00 hostname facility.severity program[pid]: message
+      - regex:
+          expression: '^(?P<timestamp>\S+)\s+(?P<host>\S+)\s+(?P<facility>\w+)\.(?P<severity>\w+)\s+(?P<program>[^\[]+)\[(?P<pid>\d+)\]:\s+(?P<message>.+)$'
+      - labels:
+          host:
+          facility:
+          severity:
+          program:
+      - timestamp:
+          source: timestamp
+          format: "2006-01-02T15:04:05-07:00"
+          location: Europe/Vilnius
+
+  # ---- Saugumo logai (atskiras srautas su label) ----
+  - job_name: security_logs
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: security
+          __path__: /var/log/syslog-ng/security.log
+    pipeline_stages:
+      - regex:
+          expression: '^(?P<timestamp>\S+)\s+(?P<host>\S+)\s+(?P<facility>\w+)\.(?P<severity>\w+)\s+(?P<program>[^\[]+)\[(?P<pid>\d+)\]:\s+(?P<message>.+)$'
+      - labels:
+          host:
+          facility:
+          severity:
+          program:
+      - timestamp:
+          source: timestamp
+          format: "2006-01-02T15:04:05-07:00"
+          location: Europe/Vilnius
+
+  # ---- Klaidų logai ----
+  - job_name: error_logs
+    static_configs:
+      - targets:
+          - localhost
+        labels:
+          job: errors
+          __path__: /var/log/syslog-ng/errors.log
+    pipeline_stages:
+      - regex:
+          expression: '^(?P<timestamp>\S+)\s+(?P<host>\S+)\s+(?P<facility>\w+)\.(?P<severity>\w+)\s+(?P<program>[^\[]+)\[(?P<pid>\d+)\]:\s+(?P<message>.+)$'
+      - labels:
+          host:
+          severity:
+          program:
+      - timestamp:
+          source: timestamp
+          format: "2006-01-02T15:04:05-07:00"
+          location: Europe/Vilnius
