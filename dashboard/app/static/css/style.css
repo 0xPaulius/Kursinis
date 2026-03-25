@@ -333,6 +333,26 @@ body {
   margin-top: 0.5rem;
 }
 
+/* --- Language switcher --- */
+.btn-lang {
+  padding: 0.3rem 0.8rem;
+  border: 1.5px solid var(--border);
+  border-radius: 9999px;
+  background: var(--bg-card);
+  color: var(--text-secondary);
+  font-size: 0.8125rem;
+  font-weight: 700;
+  letter-spacing: 0.04em;
+  cursor: pointer;
+  transition: border-color 0.15s, color 0.15s, background 0.15s;
+}
+
+.btn-lang:hover {
+  border-color: #6366f1;
+  color: #6366f1;
+  background: var(--bg-card-alt);
+}
+
 /* --- Load more button --- */
 .btn-load-more {
   display: block;

@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="lt">
+<html lang="lt" x-bind:lang="$store.i18n.current">
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
@@ -14,24 +14,36 @@
 <div class="page-wrapper">
 
   <!-- ============================================================
-       ANTRAŠTĖ — bendra sistemos būklė
+       ANTRAŠTĖ — bendra sistemos būklė + kalbos keitiklis
   ============================================================ -->
   <header class="header" x-data="headerPanel">
     <div class="header-title">
       <div>
-        <h1>Stebėjimo pultas</h1>
-        <div class="header-subtitle">Centralizuota žurnalų analizės sistema</div>
+        <h1 x-text="$store.i18n.t('title')">Stebėjimo pultas</h1>
+        <div class="header-subtitle" x-text="$store.i18n.t('subtitle')"></div>
       </div>
     </div>
 
-    <div>
-      <span
-        class="overall-badge"
-        :class="overall"
-        x-text="badgeLabel"
-      >Tikrinama...</span>
-      <div class="refresh-hint" x-show="checkedAt">
-        Patikrinta: <span x-text="checkedAt ? new Date(checkedAt).toLocaleTimeString('lt-LT') : ''"></span>
+    <div style="display:flex; align-items:center; gap:0.75rem; flex-wrap:wrap;">
+      <!-- Kalbos keitiklio mygtukas -->
+      <button
+        type="button"
+        class="btn-lang"
+        @click="$store.i18n.toggle()"
+        x-text="$store.i18n.t('lang_switch')"
+        :title="$store.i18n.current === 'lt' ? 'Switch to English' : 'Perjungti į lietuvių kalbą'"
+      ></button>
+
+      <div>
+        <span
+          class="overall-badge"
+          :class="overall"
+          x-text="badgeLabel"
+        >Tikrinama...</span>
+        <div class="refresh-hint" x-show="checkedAt">
+          <span x-text="$store.i18n.t('checked_at')"></span>
+          <span x-text="checkedAt ? new Date(checkedAt).toLocaleTimeString($store.i18n.current === 'lt' ? 'lt-LT' : 'en-GB') : ''"></span>
+        </div>
       </div>
     </div>
   </header>
@@ -40,11 +52,9 @@
        1. SISTEMOS BŪKLĖ — paslaugų sveikatos kortelės
   ============================================================ -->
   <section class="section" x-data="healthPanel">
-    <div class="section-title">Sistemos būklė</div>
+    <div class="section-title" x-text="$store.i18n.t('system_status')"></div>
 
-    <div x-show="error" class="banner-error">
-      ⚠ Nepavyko gauti sistemos būklės. Bandoma iš naujo...
-    </div>
+    <div x-show="error" class="banner-error" x-text="$store.i18n.t('status_error')"></div>
 
     <!-- Skeleton kol kraunama -->
     <div class="cards-grid" x-show="loading && !error">
@@ -52,7 +62,7 @@
         <div class="card health-card" style="opacity:0.4">
           <div class="health-dot unknown"></div>
           <div class="health-info">
-            <div class="label">Kraunama...</div>
+            <div class="label" x-text="$store.i18n.t('loading')"></div>
             <div class="msg">—</div>
           </div>
         </div>
@@ -65,8 +75,8 @@
         <div class="card health-card">
           <div class="health-dot" :class="svc.status"></div>
           <div class="health-info">
-            <div class="label" x-text="svc.label"></div>
-            <div class="msg" x-text="svc.message"></div>
+            <div class="label" x-text="$store.i18n.svcLabel(svc.name, svc.label)"></div>
+            <div class="msg"   x-text="$store.i18n.svcMsg(svc.message)"></div>
           </div>
         </div>
       </template>
@@ -74,26 +84,24 @@
   </section>
 
   <!-- ============================================================
-       2. ŽURNALŲ SRAUTAS — dabartinis rodiklis ir grafikas
+       2. LOG SRAUTAS — dabartinis rodiklis ir grafikas
   ============================================================ -->
   <section class="section" x-data="trafficPanel">
-    <div class="section-title">Žurnalų srautas</div>
+    <div class="section-title" x-text="$store.i18n.t('log_traffic')"></div>
 
-    <div x-show="error" class="banner-error">
-      ⚠ Nepavyko gauti srauto duomenų.
-    </div>
+    <div x-show="error" class="banner-error" x-text="$store.i18n.t('traffic_error')"></div>
 
     <!-- Dabartinis kiekis ir greitis -->
     <div class="cards-grid" style="grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); margin-bottom: 1rem;">
 
       <div class="card stat-card">
-        <div class="stat-value" x-text="current ? current.total.toLocaleString('lt-LT') : '—'"></div>
-        <div class="stat-label">Žurnalai per 5 min</div>
+        <div class="stat-value" x-text="current ? current.total.toLocaleString($store.i18n.current === 'lt' ? 'lt-LT' : 'en-GB') : '—'"></div>
+        <div class="stat-label" x-text="$store.i18n.t('logs_5min')"></div>
       </div>
 
       <div class="card stat-card">
         <div class="stat-value" x-text="current ? current.logs_per_minute : '—'"></div>
-        <div class="stat-label">Žurnalai per minutę</div>
+        <div class="stat-label" x-text="$store.i18n.t('logs_per_min')"></div>
       </div>
 
       <!-- Klaidų kiekis -->
@@ -103,20 +111,24 @@
           x-text="current ? (current.by_severity.err || current.by_severity.error || current.by_severity.crit || 0) : '—'"
           :style="current && (current.by_severity.err || current.by_severity.error || current.by_severity.crit) ? 'color: var(--color-critical)' : ''"
         ></div>
-        <div class="stat-label">Klaidos per 5 min</div>
+        <div class="stat-label" x-text="$store.i18n.t('errors_5min')"></div>
       </div>
 
     </div>
 
     <!-- Grafikas (paskutinės 24 val.) -->
     <div class="chart-card">
-      <div class="chart-title">Žurnalų srautas per paskutines 24 val.</div>
+      <div class="chart-title" x-text="$store.i18n.t('chart_title')"></div>
       <div class="chart-wrap">
-        <canvas id="traffic-chart" role="img" aria-label="Žurnalų srauto grafikas per 24 valandas"></canvas>
+        <canvas
+          id="traffic-chart"
+          role="img"
+          :aria-label="$store.i18n.t('chart_aria')"
+        ></canvas>
       </div>
     </div>
 
-    <div class="refresh-hint">Atnaujinama automatiškai kas 30 sek.</div>
+    <div class="refresh-hint" x-text="$store.i18n.t('refresh_traffic')"></div>
   </section>
 
   <!-- ============================================================
@@ -124,22 +136,17 @@
   ============================================================ -->
   <section class="section" x-data="alertPanel">
     <div class="section-title">
-      Įspėjimai
+      <span x-text="$store.i18n.t('alerts')"></span>
       <span x-show="total > 0" style="font-weight:700; color: var(--color-critical);"
             x-text="' (' + total + ')'"></span>
     </div>
 
-    <div x-show="error" class="banner-error">
-      ⚠ Nepavyko gauti įspėjimų. Bandoma iš naujo...
-    </div>
+    <div x-show="error" class="banner-error" x-text="$store.i18n.t('alerts_error')"></div>
 
     <!-- Nėra įspėjimų -->
-    <div
-      class="state-empty"
-      x-show="!loading && !error && alerts.length === 0"
-    >
-      <div class="icon">✅</div>
-      <p>Įspėjimų nėra — sistema veikia normaliai</p>
+    <div class="state-empty" x-show="!loading && !error && alerts.length === 0">
+      <div class="icon">&#10003;</div>
+      <p x-text="$store.i18n.t('no_alerts')"></p>
     </div>
 
     <!-- Įspėjimų sąrašas -->
@@ -150,35 +157,24 @@
           <!-- Antraštė (spaudžiama) -->
           <div class="alert-header" @click="toggle(alert.id)">
             <div class="alert-main">
-              <div class="alert-title" x-text="alert.title"></div>
+              <div class="alert-title" x-text="$store.i18n.alertTitle(alert.alert_type, alert.title)"></div>
               <div class="alert-meta">
-                <span class="alert-time" x-text="relTime(alert.timestamp)"></span>
-                <span
-                  class="alert-source"
-                  x-show="alert.source_ip"
-                  x-text="alert.source_ip"
-                ></span>
-                <span
-                  class="alert-source"
-                  x-show="alert.source_host"
-                  x-text="alert.source_host"
-                ></span>
+                <span class="alert-time"   x-text="$store.i18n.relTime(alert.timestamp)"></span>
+                <span class="alert-source" x-show="alert.source_ip"   x-text="alert.source_ip"></span>
+                <span class="alert-source" x-show="alert.source_host" x-text="alert.source_host"></span>
               </div>
             </div>
-            <span class="severity-badge" :class="alert.severity" x-text="sevLabel(alert.severity)"></span>
-            <svg
-              class="alert-expand-icon"
-              :class="{ open: isExpanded(alert.id) }"
-              xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor"
-            >
+            <span class="severity-badge" :class="alert.severity" x-text="$store.i18n.sevLabel(alert.severity)"></span>
+            <svg class="alert-expand-icon" :class="{ open: isExpanded(alert.id) }"
+                 xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
               <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
             </svg>
           </div>
 
           <!-- Išplėstas turinys -->
           <div class="alert-body" x-show="isExpanded(alert.id)" x-transition>
-            <p class="alert-explanation" x-text="alert.explanation"></p>
-            <div class="alert-recommendation" x-text="alert.recommendation"></div>
+            <p class="alert-explanation"  x-text="$store.i18n.alertExplanation(alert.alert_type, alert.explanation)"></p>
+            <div class="alert-recommendation" x-text="$store.i18n.alertRecommendation(alert.alert_type, alert.recommendation)"></div>
           </div>
 
         </div>
@@ -194,32 +190,35 @@
         :disabled="historyLoading"
         x-show="!showHistory"
       >
-        <span x-show="!historyLoading">Rodyti visą istoriją</span>
-        <span x-show="historyLoading">Kraunama...</span>
+        <span x-show="!historyLoading" x-text="$store.i18n.t('show_history')"></span>
+        <span x-show="historyLoading"  x-text="$store.i18n.t('loading_hist')"></span>
       </button>
 
       <div x-show="showHistory && historyAlerts.length > 0" style="margin-top: 0.75rem;">
-        <div class="section-title">Visa istorija (<span x-text="historyTotal"></span>)</div>
+        <div class="section-title">
+          <span x-text="$store.i18n.t('full_history')"></span>
+          (<span x-text="historyTotal"></span>)
+        </div>
         <div class="alert-list">
           <template x-for="alert in historyAlerts" :key="'h-' + alert.id">
             <div class="alert-card" :class="alert.severity">
               <div class="alert-header" @click="toggle('h-' + alert.id)">
                 <div class="alert-main">
-                  <div class="alert-title" x-text="alert.title"></div>
+                  <div class="alert-title" x-text="$store.i18n.alertTitle(alert.alert_type, alert.title)"></div>
                   <div class="alert-meta">
-                    <span class="alert-time" x-text="relTime(alert.timestamp)"></span>
+                    <span class="alert-time"   x-text="$store.i18n.relTime(alert.timestamp)"></span>
                     <span class="alert-source" x-show="alert.source_ip" x-text="alert.source_ip"></span>
                   </div>
                 </div>
-                <span class="severity-badge" :class="alert.severity" x-text="sevLabel(alert.severity)"></span>
+                <span class="severity-badge" :class="alert.severity" x-text="$store.i18n.sevLabel(alert.severity)"></span>
                 <svg class="alert-expand-icon" :class="{ open: isExpanded('h-' + alert.id) }"
                      xmlns="http://www.w3.org/2000/svg" viewBox="0 0 20 20" fill="currentColor">
                   <path fill-rule="evenodd" d="M5.23 7.21a.75.75 0 011.06.02L10 11.168l3.71-3.938a.75.75 0 111.08 1.04l-4.25 4.5a.75.75 0 01-1.08 0l-4.25-4.5a.75.75 0 01.02-1.06z" clip-rule="evenodd" />
                 </svg>
               </div>
               <div class="alert-body" x-show="isExpanded('h-' + alert.id)" x-transition>
-                <p class="alert-explanation" x-text="alert.explanation"></p>
-                <div class="alert-recommendation" x-text="alert.recommendation"></div>
+                <p class="alert-explanation"      x-text="$store.i18n.alertExplanation(alert.alert_type, alert.explanation)"></p>
+                <div class="alert-recommendation" x-text="$store.i18n.alertRecommendation(alert.alert_type, alert.recommendation)"></div>
               </div>
             </div>
           </template>
@@ -233,13 +232,13 @@
           :disabled="historyLoading"
           style="margin-top: 0.5rem;"
         >
-          <span x-show="!historyLoading">Rodyti daugiau...</span>
-          <span x-show="historyLoading">Kraunama...</span>
+          <span x-show="!historyLoading" x-text="$store.i18n.t('show_more')"></span>
+          <span x-show="historyLoading"  x-text="$store.i18n.t('loading_hist')"></span>
         </button>
       </div>
     </div>
 
-    <div class="refresh-hint">Įspėjimai atnaujinami kas 15 sek.</div>
+    <div class="refresh-hint" x-text="$store.i18n.t('refresh_alerts')"></div>
   </section>
 
 </div><!-- .page-wrapper -->
