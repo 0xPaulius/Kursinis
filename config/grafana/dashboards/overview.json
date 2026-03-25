@@ -67,27 +67,47 @@
     },
     {
       "title": "Top 10 šaltinių (hosts)",
-      "type": "barchart",
+      "type": "bargauge",
       "gridPos": { "h": 8, "w": 8, "x": 8, "y": 8 },
       "datasource": { "type": "loki", "uid": "" },
+      "options": {
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": true },
+        "displayMode": "gradient",
+        "showUnfilled": true
+      },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" } }
+      },
       "targets": [
         {
           "expr": "topk(10, sum by (host) (count_over_time({job=\"syslog\"} | host != \"\" [$__range])))",
           "legendFormat": "{{host}}",
-          "refId": "A"
+          "refId": "A",
+          "instant": true
         }
       ]
     },
     {
       "title": "Top programos",
-      "type": "barchart",
+      "type": "bargauge",
       "gridPos": { "h": 8, "w": 8, "x": 16, "y": 8 },
       "datasource": { "type": "loki", "uid": "" },
+      "options": {
+        "orientation": "horizontal",
+        "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": true },
+        "displayMode": "gradient",
+        "showUnfilled": true
+      },
+      "fieldConfig": {
+        "defaults": { "color": { "mode": "palette-classic" } }
+      },
       "targets": [
         {
           "expr": "topk(10, sum by (program) (count_over_time({job=\"syslog\"} | program != \"\" [$__range])))",
           "legendFormat": "{{program}}",
-          "refId": "A"
+          "refId": "A",
+          "instant": true
         }
       ]
     },
