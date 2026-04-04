@@ -1,0 +1,165 @@
+PROJECT CONTEXT — Centralized Log Analysis & Anomaly Detection System
+======================================================================
+Academic coursework (kursinis darbas) — Vilnius University ISKS
+Author: Paulius Turauskas
+Purpose: Centralized log collection, storage, visualization, and anomaly detection for small organizations.
+
+
+OVERVIEW
+--------
+A fully containerized (Docker Compose) log analysis pipeline. Network devices and servers
+send syslog messages into the system. Logs are collected, stored, and analyzed. Anomalies
+are detected automatically using rule-based, statistical, and machine learning methods.
+A custom web dashboard (in addition to Grafana) provides a Lithuanian-language UI.
+
+Data flow:
+  [Network devices / servers]
+        |  syslog (UDP/TCP 514)
+        v
+  [syslog-ng]  — collects and writes log files to shared volume
+        |  file reads (shared Docker volume: syslog-ng-logs)
+        v
+  [Promtail]   — tails files, parses with regex, extracts labels, ships to Loki
+        |  HTTP push
+        v
+  [Loki]       — stores logs indexed by labels only (not full-text), 30-day retention
+        |  HTTP query API (/loki/api/v1/query_range)
+        v
+  [Anomaly Detector]  — Python service, polls Loki, detects threats, writes alerts to JSON
+  [Grafana]           — reads Loki, provides dashboards and alerting UI
+  [Dashboard]         — custom Flask/Python web UI, reads Loki + anomaly JSON
+
+
+SERVICES (docker-compose.yml — 7 containers)
+--------------------------------------------
+1. syslog-ng (balabit/syslog-ng:4.8.3)
+   - Listens on 514/UDP, 514/TCP, 1514/TCP
+   - Config: config/syslog-ng/syslog-ng.conf
+   - Writes to shared volume: /var/log/syslog-ng
+   - Output template: "${ISODATE} ${HOST} ${FACILITY}.${LEVEL} ${PROGRAM}[${PID}]: ${MESSAGE}"
+
+2. promtail (grafana/promtail:3.4.2)
+   - Reads syslog-ng log files from shared volume
+   - Config: config/promtail/promtail.yml
+   - Parses logs with regex to extract labels: host, facility, level, program, pid
+   - Pushes parsed log streams to Loki
+   - Regex must match syslog-ng output template exactly
+
+3. loki (grafana/loki:3.4.2)
+   - Log storage and query engine
+   - Config: config/loki/loki.yml
+   - Label-based indexing only (no full-text search)
+   - 30-day retention
+   - Internal port 3100 (not exposed outside Docker network)
+
+4. grafana (grafana/grafana:11.5.2)
+   - Web UI at port 3000
+   - Credentials: admin / admin123 (password from GF_SECURITY_ADMIN_PASSWORD env var)
+   - Loki datasource auto-provisioned: config/grafana/provisioning/
+   - Dashboards auto-provisioned: config/grafana/dashboards/
+   - Timezone: Europe/Vilnius
+
+5. anomaly-detector (Python 3.12-slim, custom build)
+   - Source: anomaly-detector/detector.py
+   - Polls Loki HTTP API every 60 seconds (CHECK_INTERVAL env var)
+   - Three detection layers:
+       a) RuleBasedDetector:
+          - SSH brute-force: >=5 failed logins per 5 min per source IP
+          - Invalid user scanning: >=3 unique usernames per IP
+          - Firewall spike: >50 DROP events in window
+       b) StatisticalDetector:
+          - Log volume z-score threshold: 3 sigma
+          - Error rate threshold: >30%
+       c) MLDetector (IsolationForest from scikit-learn):
+          - Features: log_count, unique_programs, error_rate, unique_ips, avg_msg_length
+          - Trains after >=20 samples collected
+          - Runs every 5th detection cycle
+   - Writes anomaly history to /data/anomaly_history.json (shared volume: anomaly-data)
+   - Optional alert webhook (Telegram/Slack) via ALERT_WEBHOOK_URL env var
+   - Health check: touches /tmp/detector.alive every cycle
+
+6. dashboard (Python Flask, custom build — feature/frontend branch)
+   - Source: dashboard/app/
+   - Web UI at port 8080
+   - Lithuanian-language interface
+   - Reads Loki API for live log data
+   - Reads /data/anomaly_history.json for detected anomalies
+   - Static assets: dashboard/app/static/ (HTML, CSS, JS)
+
+7. log-generator (Python, DEV ONLY — profile: dev)
+   - Source: log-generator/generator.py
+   - Sends realistic synthetic syslog messages to syslog-ng:514
+   - Simulates normal traffic and attack scenarios (SSH brute-force, port scans, etc.)
+   - Only starts with: docker compose --profile dev up -d
+   - Never used in production
+
+
+FILE STRUCTURE
+--------------
+docker-compose.yml
+config/
+  syslog-ng/syslog-ng.conf       — syslog receiver, filters, destinations
+  loki/loki.yml                  — storage backend, retention, schema config
+  promtail/promtail.yml          — file scrape config, regex pipeline, label extraction
+  grafana/provisioning/          — auto datasource + dashboard provider YAML
+  grafana/dashboards/            — Grafana dashboard JSON files
+anomaly-detector/
+  detector.py                    — main detection logic (3 layers: rule, statistical, ML)
+  Dockerfile                     — Python 3.12-slim image
+  requirements.txt               — requests, numpy, scikit-learn
+dashboard/
+  app/                           — Flask application
+    static/
+      index.html                 — main page
+      css/style.css              — styling
+      js/app.js                  — frontend logic
+  Dockerfile
+  requirements.txt
+  tests/                         — dashboard tests
+log-generator/
+  generator.py                   — synthetic syslog traffic generator
+  Dockerfile
+CLAUDE.md                        — AI assistant context file
+
+
+PORTS
+-----
+514/UDP, 514/TCP   — syslog input (exposed, for network devices)
+1514/TCP           — alternative syslog input (exposed)
+3000               — Grafana web UI
+8080               — Custom dashboard web UI
+3100               — Loki API (internal only, not exposed)
+
+
+DOCKER VOLUMES
+--------------
+syslog-ng-logs     — shared between syslog-ng (write) and promtail (read)
+loki-data          — Loki log storage
+grafana-data       — Grafana state
+anomaly-data       — anomaly_history.json, shared between anomaly-detector and dashboard
+promtail-positions — Promtail file read positions (for restart safety)
+
+
+ENVIRONMENT VARIABLES (key ones)
+---------------------------------
+GF_SECURITY_ADMIN_PASSWORD   — Grafana admin password (required)
+LOKI_URL                     — Loki endpoint (default: http://loki:3100)
+CHECK_INTERVAL               — Anomaly detector poll interval in seconds (default: 60)
+SSH_BRUTE_THRESHOLD          — Max SSH failures before alert (default: 5)
+LOG_SPIKE_MULTIPLIER         — Multiplier above average to trigger spike alert (default: 3.0)
+ALERT_WEBHOOK_URL            — Optional Telegram/Slack webhook for alert delivery
+SYSLOG_HOST / SYSLOG_PORT    — Log generator target (default: syslog-ng:514)
+
+
+CODE STYLE
+----------
+- Python: type hints, dataclasses, f-strings, docstrings on all public methods
+- Comments: academic/explanatory comments in Lithuanian, technical inline comments in English
+- Config files: YAML for Loki/Promtail/Grafana, syslog-ng native syntax for syslog-ng.conf
+- No secrets in source code — all credentials via environment variables
+
+
+CURRENT BRANCH: feature/frontend
+Currently working on the dashboard web UI (service #6).
+Modified files: dashboard/Dockerfile, dashboard/app/static/css/style.css,
+                dashboard/app/static/index.html, dashboard/app/static/js/app.js
