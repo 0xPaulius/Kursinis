@@ -18,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.routers import traffic, alerts, health
+from app.routers import traffic, alerts, health, auth
 from app.services.loki_client import AsyncLokiClient
 from app.services.health_checker import HealthChecker
 
@@ -62,6 +62,7 @@ app.add_middleware(
 )
 
 # API maršrutai
+app.include_router(auth.router)
 app.include_router(traffic.router)
 app.include_router(alerts.router)
 app.include_router(health.router)
@@ -73,3 +74,8 @@ app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
 @app.get("/", include_in_schema=False)
 async def root() -> FileResponse:
     return FileResponse(STATIC_DIR / "index.html")
+
+
+@app.get("/login", include_in_schema=False)
+async def login_page() -> FileResponse:
+    return FileResponse(STATIC_DIR / "login.html")
