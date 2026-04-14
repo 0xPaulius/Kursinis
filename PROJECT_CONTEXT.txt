@@ -27,7 +27,7 @@ Data flow:
         v
   [Anomaly Detector]  — Python service, polls Loki, detects threats, writes alerts to JSON
   [Grafana]           — reads Loki, provides dashboards and alerting UI
-  [Dashboard]         — custom Flask/Python web UI, reads Loki + anomaly JSON
+  [Dashboard]         — custom FastAPI/Python web UI, reads Loki + anomaly JSON
 
 
 SERVICES (docker-compose.yml — 7 containers)
@@ -78,13 +78,17 @@ SERVICES (docker-compose.yml — 7 containers)
    - Optional alert webhook (Telegram/Slack) via ALERT_WEBHOOK_URL env var
    - Health check: touches /tmp/detector.alive every cycle
 
-6. dashboard (Python Flask, custom build — feature/frontend branch)
+6. dashboard (Python FastAPI + Uvicorn, custom build)
    - Source: dashboard/app/
    - Web UI at port 8080
-   - Lithuanian-language interface
+   - Bilingual interface (Lithuanian/English, toggle in UI)
+   - FastAPI backend: routers/ (auth, traffic, alerts, health), services/ (loki_client, alert_reader, health_checker)
+   - Pydantic response models: models/schemas.py
+   - Frontend: Vanilla JS + Tailwind CSS + Chart.js (static/)
+   - Auth: demo credentials (admin / admin123), session-based via sessionStorage
    - Reads Loki API for live log data
    - Reads /data/anomaly_history.json for detected anomalies
-   - Static assets: dashboard/app/static/ (HTML, CSS, JS)
+   - Tests: dashboard/tests/ (pytest)
 
 7. log-generator (Python, DEV ONLY — profile: dev)
    - Source: log-generator/generator.py
@@ -108,18 +112,39 @@ anomaly-detector/
   Dockerfile                     — Python 3.12-slim image
   requirements.txt               — requests, numpy, scikit-learn
 dashboard/
-  app/                           — Flask application
+  app/
+    main.py                      — FastAPI entry point, middleware, route registration
+    dependencies.py              — shared dependencies
+    routers/
+      auth.py                    — login/logout API routes
+      traffic.py                 — log traffic API (queries Loki)
+      alerts.py                  — anomaly alert API (reads JSON)
+      health.py                  — service health check API
+    services/
+      loki_client.py             — async Loki HTTP client
+      alert_reader.py            — anomaly_history.json reader
+      health_checker.py          — async health checker for all services
+    models/
+      schemas.py                 — Pydantic response models
     static/
-      index.html                 — main page
-      css/style.css              — styling
-      js/app.js                  — frontend logic
+      index.html                 — main dashboard page (SPA)
+      login.html                 — login page
+      css/style.css              — custom styles
+      js/app.js                  — frontend logic (navigation, i18n, charts)
+      js/chart.min.js            — Chart.js library
+      js/tailwind.min.js         — Tailwind CSS standalone
+      fonts/                     — Material Symbols icon font
   Dockerfile
   requirements.txt
-  tests/                         — dashboard tests
+  tests/
+    test_alert_reader.py         — alert reader unit tests
+    test_routes.py               — API route tests
+demo_data/
+  anomaly_history.json           — seed alert data for demo/testing
+seed_demo.sh                     — loads demo data into Docker volume
 log-generator/
   generator.py                   — synthetic syslog traffic generator
   Dockerfile
-CLAUDE.md                        — AI assistant context file
 
 
 PORTS
@@ -159,7 +184,7 @@ CODE STYLE
 - No secrets in source code — all credentials via environment variables
 
 
-CURRENT BRANCH: feature/frontend
-Currently working on the dashboard web UI (service #6).
-Modified files: dashboard/Dockerfile, dashboard/app/static/css/style.css,
-                dashboard/app/static/index.html, dashboard/app/static/js/app.js
+KNOWN ISSUES
+------------
+- DEF-001: Search result count in dashboard is hardcoded in Lithuanian (not translated
+  when UI is switched to English). Located in dashboard/app/static/js/app.js:731.

@@ -42,7 +42,7 @@ class HealthChecker:
         if self._in_flight and not self._in_flight.done():
             return await self._in_flight
 
-        self._in_flight = asyncio.get_event_loop().create_task(self._fetch())
+        self._in_flight = asyncio.create_task(self._fetch())
         result = await self._in_flight
         self._cached = result
         self._cached_at = time.monotonic()

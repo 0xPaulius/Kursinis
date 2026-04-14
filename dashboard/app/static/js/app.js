@@ -87,6 +87,27 @@ const I18N = {
       high_error_rate:   "Klaidų kiekis viršija normalų lygį.",
       ml_anomaly:        "ML aptiko neįprastus sistemos veiklos pokyčius.",
     },
+    nav_qa:             "Kokybė",
+    qa_page:            "Kokybės užtikrinimas",
+    qa_run_btn:         "Vykdyti testus",
+    qa_running:         "Vykdoma...",
+    qa_total:           "Iš viso",
+    qa_passed:          "Praėjo",
+    qa_failed:          "Nepraėjo",
+    qa_duration:        "Trukmė, s",
+    qa_no_results:      "Paspauskite „Vykdyti testus"",
+    qa_test_results:    "Testų rezultatai",
+    qa_test_name:       "Testo pavadinimas",
+    qa_test_status:     "Būklė",
+    qa_test_duration:   "Trukmė",
+    qa_last_run:        "Paleista",
+    qa_defects_title:   "Žinomi defektai",
+    qa_no_defects:      "Atvirų defektų nėra",
+    qa_status_passed:   "Praėjo",
+    qa_status_failed:   "Nepraėjo",
+    qa_status_error:    "Klaida",
+    qa_steps_summary:   "Atgaminimo žingsniai",
+    qa_defect_open:     "Atviras",
   },
   en: {
     title:              "Log Analysis",
@@ -169,6 +190,27 @@ const I18N = {
       high_error_rate:   "The error count has exceeded the normal level.",
       ml_anomaly:        "ML detected unusual changes in system activity.",
     },
+    nav_qa:             "Quality",
+    qa_page:            "Quality Assurance",
+    qa_run_btn:         "Run Tests",
+    qa_running:         "Running...",
+    qa_total:           "Total",
+    qa_passed:          "Passed",
+    qa_failed:          "Failed",
+    qa_duration:        "Duration, s",
+    qa_no_results:      "Click \"Run Tests\" to start",
+    qa_test_results:    "Test Results",
+    qa_test_name:       "Test Name",
+    qa_test_status:     "Status",
+    qa_test_duration:   "Duration",
+    qa_last_run:        "Run at",
+    qa_defects_title:   "Known Defects",
+    qa_no_defects:      "No open defects",
+    qa_status_passed:   "Passed",
+    qa_status_failed:   "Failed",
+    qa_status_error:    "Error",
+    qa_steps_summary:   "Steps to reproduce",
+    qa_defect_open:     "Open",
   },
 };
 
@@ -195,6 +237,7 @@ const state = {
   alerts:       [],
   devices:      [],
   trafficChart: null,
+  qa:           { defects: [], lastResults: null },
 };
 
 // ---------------------------------------------------------------------------
@@ -217,6 +260,14 @@ function requireAuth() {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
+function esc(str) {
+  return String(str ?? "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
 function t(key) {
   const d = I18N[state.lang];
   return (d && d[key] !== undefined) ? d[key] : (I18N.en[key] || key);
@@ -294,7 +345,7 @@ function navigate(page) {
   const target = el("page-" + page);
   if (target) target.classList.add("active");
 
-  ["dashboard", "anomalies", "devices", "messages"].forEach(p => {
+  ["dashboard", "anomalies", "devices", "messages", "qa"].forEach(p => {
     const btn = el("nav-" + p);
     if (btn) btn.classList.toggle("active", p === page);
   });
@@ -302,6 +353,7 @@ function navigate(page) {
   state.page = page;
   if (page === "anomalies") renderAnomaliesPage();
   if (page === "devices")   renderDevicesPage();
+  if (page === "qa")        renderQAPage();
 }
 
 // ---------------------------------------------------------------------------
@@ -913,6 +965,15 @@ function applyI18n() {
   setText("messages-page-title",    t("messages_page"));
   setText("messages-soon-title",    t("messages_soon"));
   setText("messages-soon-desc",     t("messages_desc"));
+  setText("nav-label-qa",           t("nav_qa"));
+  setText("qa-page-title",          t("qa_page"));
+  setText("qa-run-btn-label",       t("qa_run_btn"));
+  setText("qa-total-label",         t("qa_total"));
+  setText("qa-passed-label",        t("qa_passed"));
+  setText("qa-failed-label",        t("qa_failed"));
+  setText("qa-duration-label",      t("qa_duration"));
+  setText("qa-no-results-label",    t("qa_no_results"));
+  setText("qa-defects-title",       t("qa_defects_title"));
   document.documentElement.lang = state.lang;
 }
 
@@ -926,6 +987,174 @@ function toggleLang() {
   renderTrafficChart();
   if (state.page === "anomalies") renderAnomaliesPage();
   if (state.page === "devices")   renderDevicesPage();
+  if (state.page === "qa")        renderQADefects(state.qa.defects);
+}
+
+// ---------------------------------------------------------------------------
+// QA
+// ---------------------------------------------------------------------------
+async function loadQADefects() {
+  try {
+    const data = await fetchJSON("/api/qa/defects");
+    state.qa.defects = data.defects || [];
+    if (state.page === "qa") renderQADefects(state.qa.defects);
+  } catch { /* silent */ }
+}
+
+function renderQAPage() {
+  renderQADefects(state.qa.defects);
+  if (state.qa.lastResults) renderQAResults(state.qa.lastResults);
+}
+
+function renderQADefects(defects) {
+  const container = el("qa-defects-list");
+  if (!container) return;
+  if (!defects || defects.length === 0) {
+    container.textContent = t("qa_no_defects");
+    return;
+  }
+  const items = defects.map(d => {
+    const isOpen      = d.status === "Open";
+    const borderCls   = isOpen ? "border-error"     : "border-secondary";
+    const statusBgCls = isOpen
+      ? "bg-error-container text-on-error-container"
+      : "bg-secondary-container text-on-secondary-container";
+    const stepsHtml = (d.steps || [])
+      .map(s => `<li>${esc(s)}</li>`)
+      .join("");
+    return `
+      <div class="bg-surface-container-lowest rounded-xl p-5 shadow-sm border-l-4 ${borderCls}">
+        <div class="flex flex-wrap items-center gap-2 mb-3">
+          <span class="font-mono text-xs font-bold px-2 py-0.5 bg-surface-container-high rounded">${esc(d.id)}</span>
+          <span class="text-[10px] px-2 py-0.5 rounded-full font-bold font-label ${statusBgCls}">${t("qa_defect_open")}</span>
+          <span class="text-xs text-on-surface-variant font-label">${esc(d.severity)} \u00b7 ${esc(d.priority)}</span>
+          <span class="text-xs font-mono text-on-surface-variant ml-auto">${esc(d.component)}</span>
+        </div>
+        <p class="font-semibold text-sm mb-3">${esc(d.name)}</p>
+        <details>
+          <summary class="text-xs text-on-surface-variant cursor-pointer hover:text-on-surface font-label">
+            ${t("qa_steps_summary")}
+          </summary>
+          <ol class="mt-2 text-xs text-on-surface-variant space-y-1 ml-4 list-decimal font-body">${stepsHtml}</ol>
+          <div class="mt-3 space-y-1">
+            <p class="text-xs"><span class="text-error font-semibold">Actual:</span> ${esc(d.actual)}</p>
+            <p class="text-xs"><span class="text-secondary font-semibold">Expected:</span> ${esc(d.expected)}</p>
+          </div>
+        </details>
+      </div>`;
+  });
+  container.innerHTML = items.join("");
+}
+
+async function runQATests() {
+  const btn       = el("qa-run-btn");
+  const btnLabel  = el("qa-run-btn-label");
+  const tableWrap = el("qa-table-wrap");
+
+  if (btn) btn.disabled = true;
+  if (btnLabel) btnLabel.textContent = t("qa_running");
+
+  if (tableWrap) {
+    const spinner = document.createElement("div");
+    spinner.className = "p-12 text-center";
+    const ring = document.createElement("div");
+    ring.className = "inline-block w-10 h-10 border-4 border-surface-container-high border-t-black rounded-full animate-spin";
+    const label = document.createElement("p");
+    label.className = "text-sm text-on-surface-variant mt-4 font-label";
+    label.textContent = t("qa_running");
+    spinner.appendChild(ring);
+    spinner.appendChild(label);
+    tableWrap.replaceChildren(spinner);
+  }
+
+  try {
+    const data = await fetchJSON("/api/qa/run");
+    state.qa.lastResults = data;
+    renderQAResults(data);
+  } catch (err) {
+    if (tableWrap) {
+      const errMsg = document.createElement("div");
+      errMsg.className = "p-8 text-center text-error text-sm font-label";
+      errMsg.textContent = `Failed to run tests: ${err.message}`;
+      tableWrap.replaceChildren(errMsg);
+    }
+  } finally {
+    if (btn) btn.disabled = false;
+    if (btnLabel) btnLabel.textContent = t("qa_run_btn");
+  }
+}
+
+function renderQAResults(data) {
+  const tableWrap = el("qa-table-wrap");
+  const summaryEl = el("qa-summary");
+  if (!data || !data.tests) return;
+
+  const { tests, summary: s } = data;
+
+  if (summaryEl && s) {
+    summaryEl.classList.remove("hidden");
+    const setV = (id, v) => { const e = el(id); if (e) e.textContent = v; };
+    setV("qa-total-val",    s.total);
+    setV("qa-passed-val",   s.passed);
+    setV("qa-failed-val",   (s.failed || 0) + (s.error || 0));
+    setV("qa-duration-val", s.duration != null ? s.duration.toFixed(2) : "\u2014");
+  }
+
+  if (!tableWrap) return;
+
+  if (tests.length === 0) {
+    const empty = document.createElement("div");
+    empty.className = "p-8 text-center text-sm text-on-surface-variant font-label";
+    empty.textContent = t("qa_no_results");
+    tableWrap.replaceChildren(empty);
+    return;
+  }
+
+  const outcomeCss = o => ({
+    passed: "bg-secondary-container text-on-secondary-container",
+    failed: "bg-error-container text-on-error-container",
+    error:  "bg-error-container text-on-error-container",
+  }[o] || "bg-surface-container-high text-on-surface-variant");
+
+  const outcomeLabel = o => ({
+    passed: t("qa_status_passed"),
+    failed: t("qa_status_failed"),
+    error:  t("qa_status_error"),
+  }[o] || esc(o));
+
+  const rows = tests.map((test, i) => `
+    <tr class="${i % 2 === 1 ? "bg-surface-container-low/40" : ""}">
+      <td class="px-4 py-2.5 text-xs font-mono text-on-surface">${esc(test.name)}</td>
+      <td class="px-4 py-2.5 whitespace-nowrap">
+        <span class="px-2 py-0.5 rounded-full text-[10px] font-bold font-label ${outcomeCss(test.outcome)}">
+          ${outcomeLabel(test.outcome)}
+        </span>
+      </td>
+      <td class="px-4 py-2.5 text-xs text-on-surface-variant font-label text-right whitespace-nowrap">
+        ${Math.round((test.duration || 0) * 1000)} ms
+      </td>
+    </tr>`).join("");
+
+  const ranAt = data.ran_at
+    ? `<span class="text-[10px] text-on-surface-variant font-label ml-auto">${t("qa_last_run")}: ${esc(data.ran_at)}</span>`
+    : "";
+
+  tableWrap.innerHTML = `
+    <div class="flex items-center px-4 py-3 border-b border-surface-container-high gap-2">
+      <span class="material-symbols-outlined text-base text-on-surface-variant">science</span>
+      <span class="text-sm font-semibold font-label">${t("qa_test_results")}</span>
+      ${ranAt}
+    </div>
+    <table class="w-full">
+      <thead>
+        <tr class="bg-surface-container-low/50">
+          <th class="px-4 py-2 text-left text-[10px] font-bold text-on-surface-variant uppercase tracking-wider font-label">${t("qa_test_name")}</th>
+          <th class="px-4 py-2 text-left text-[10px] font-bold text-on-surface-variant uppercase tracking-wider font-label">${t("qa_test_status")}</th>
+          <th class="px-4 py-2 text-right text-[10px] font-bold text-on-surface-variant uppercase tracking-wider font-label">${t("qa_test_duration")}</th>
+        </tr>
+      </thead>
+      <tbody>${rows}</tbody>
+    </table>`;
 }
 
 // ---------------------------------------------------------------------------
@@ -970,6 +1199,7 @@ async function init() {
     loadTrafficHistory(),
     loadAlerts(),
     loadDevices(),
+    loadQADefects(),
   ]);
   setInterval(loadHealth,          30_000);
   setInterval(loadTrafficCurrent,  30_000);
