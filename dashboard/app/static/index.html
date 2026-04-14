@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="lt">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Logų analizė</title>
+<script src="/static/js/tailwind.min.js"></script>
+<link rel="stylesheet" href="/static/fonts/fonts.css">
+<link rel="stylesheet" href="/static/css/style.css">
+<script>
+tailwind.config = {
+  theme: {
+    extend: {
+      colors: {
+        "surface-container-lowest": "#ffffff",
+        "surface-container-low":    "#f2f4f6",
+        "surface-container":        "#eceef0",
+        "surface-container-high":   "#e6e8ea",
+        "surface-container-highest":"#e0e3e5",
+        "surface":                  "#f7f9fb",
+        "on-surface":               "#191c1e",
+        "on-surface-variant":       "#45464d",
+        "outline":                  "#76777d",
+        "outline-variant":          "#c6c6cd",
+        "primary":                  "#000000",
+        "on-primary":               "#ffffff",
+        "primary-container":        "#131b2e",
+        "on-primary-container":     "#7c839b",
+        "primary-fixed":            "#dae2fd",
+        "primary-fixed-dim":        "#bec6e0",
+        "secondary":                "#006c49",
+        "on-secondary":             "#ffffff",
+        "secondary-container":      "#6cf8bb",
+        "on-secondary-container":   "#00714d",
+        "secondary-fixed":          "#6ffbbe",
+        "secondary-fixed-dim":      "#4edea3",
+        "tertiary-fixed":           "#ffddb8",
+        "tertiary-fixed-dim":       "#ffb95f",
+        "on-tertiary-container":    "#b87500",
+        "on-tertiary-fixed":        "#2a1700",
+        "error":                    "#ba1a1a",
+        "on-error":                 "#ffffff",
+        "error-container":          "#ffdad6",
+        "on-error-container":       "#93000a",
+      },
+      fontFamily: {
+        headline: ["Manrope","sans-serif"],
+        body:     ["Inter","sans-serif"],
+        label:    ["Inter","sans-serif"],
+      },
+      borderRadius: {
+        DEFAULT: "0.25rem",
+        lg: "0.5rem",
+        xl: "0.75rem",
+        "2xl": "1rem",
+        full: "9999px",
+      },
+    },
+  },
+}
+</script>
+<style>
+  .material-symbols-outlined { font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24; }
+  .ms-fill { font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24; }
+  body { font-family:'Inter',sans-serif; background:#f7f9fb; }
+  .hero-gradient { background: linear-gradient(135deg,#000 0%,#131b2e 100%); }
+  .page { display:none; }
+  .page.active { display:block; }
+  .nav-btn { display:flex; align-items:center; gap:0.75rem; padding:0.625rem 1rem; border-radius:0.75rem; transition:all .2s; width:100%; cursor:pointer; border:none; background:transparent; text-align:left; }
+  .nav-btn:hover { background:rgba(148,163,184,.3); }
+  .nav-btn.active { background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.1); transform:translateX(4px); font-weight:600; color:#0f172a; }
+  .nav-btn.active .nav-icon { font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24; }
+  .nav-btn:not(.active) { color:#64748b; }
+  .skeleton { background:linear-gradient(90deg,#e2e8f0 25%,#f1f5f9 50%,#e2e8f0 75%); background-size:200% 100%; animation:shimmer 1.5s infinite; border-radius:6px; }
+  @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+</style>
+</head>
+<body class="text-on-surface">
+
+<!-- SIDEBAR -->
+<aside class="fixed left-0 top-0 h-full w-60 bg-slate-100 flex flex-col py-8 px-4 z-50">
+  <div class="mb-10 px-2 flex items-center gap-3">
+    <div class="w-9 h-9 bg-black rounded-xl flex items-center justify-center shrink-0">
+      <span class="material-symbols-outlined ms-fill text-white text-lg">dns</span>
+    </div>
+    <div>
+      <div id="sidebar-title" class="text-sm font-extrabold text-slate-900 tracking-tight font-headline">Logų analizė</div>
+      <div class="text-[10px] text-slate-500 uppercase tracking-wider">Stebėjimo pultas</div>
+    </div>
+  </div>
+
+  <nav class="flex flex-col gap-1">
+    <button class="nav-btn active" id="nav-dashboard" onclick="navigate('dashboard')">
+      <span class="material-symbols-outlined nav-icon text-xl">dashboard</span>
+      <span id="nav-label-dashboard" class="text-sm font-label">Apžvalga</span>
+    </button>
+    <button class="nav-btn" id="nav-anomalies" onclick="navigate('anomalies')">
+      <span class="material-symbols-outlined nav-icon text-xl">warning</span>
+      <span id="nav-label-anomalies" class="text-sm font-label">Anomalijos</span>
+    </button>
+    <button class="nav-btn" id="nav-devices" onclick="navigate('devices')">
+      <span class="material-symbols-outlined nav-icon text-xl">router</span>
+      <span id="nav-label-devices" class="text-sm font-label">Įrenginiai</span>
+    </button>
+    <button class="nav-btn" id="nav-messages" onclick="navigate('messages')">
+      <span class="material-symbols-outlined nav-icon text-xl">notifications_active</span>
+      <span id="nav-label-messages" class="text-sm font-label">Pranešimai</span>
+    </button>
+    <button class="nav-btn" id="nav-qa" onclick="navigate('qa')">
+      <span class="material-symbols-outlined nav-icon text-xl">science</span>
+      <span id="nav-label-qa" class="text-sm font-label">Kokybė</span>
+    </button>
+  </nav>
+
+  <div class="mt-auto px-2">
+    <button onclick="toggleLang()" id="lang-btn"
+      class="w-full px-4 py-2 rounded-xl text-xs font-bold text-slate-500 hover:bg-slate-200/50 transition-colors text-left font-label">
+      EN
+    </button>
+  </div>
+</aside>
+
+<!-- HEADER -->
+<header class="fixed top-0 right-0 w-[calc(100%-15rem)] px-6 py-4 bg-white/80 backdrop-blur-xl shadow-sm z-40 flex justify-between items-center">
+  <div class="flex items-center gap-2 bg-surface-container-low px-4 py-1.5 rounded-xl w-72 relative">
+    <span class="material-symbols-outlined text-outline text-lg">search</span>
+    <input id="search-input" type="text" class="bg-transparent border-none focus:ring-0 text-sm w-full outline-none"
+      placeholder="Ieškoti įvykių ar įrenginių...">
+    <button id="search-clear" class="hidden text-outline hover:text-on-surface transition" title="Išvalyti">
+      <span class="material-symbols-outlined text-base">close</span>
+    </button>
+  </div>
+  <div id="search-count" class="hidden text-xs text-on-surface-variant font-label ml-2"></div>
+  <div class="flex items-center gap-3 ml-auto">
+    <div id="health-badge" class="flex items-center gap-2 px-3 py-1.5 bg-surface-container rounded-full">
+      <div class="w-2 h-2 rounded-full bg-outline"></div>
+      <span class="text-[10px] font-bold tracking-wide uppercase font-label text-on-surface-variant">Tikrinama...</span>
+    </div>
+    <button id="logout-btn" onclick="logout()"
+      class="flex items-center gap-1 px-3 py-1.5 rounded-full text-[10px] font-bold uppercase font-label text-on-surface-variant hover:bg-surface-container transition"
+      title="Atsijungti">
+      <span class="material-symbols-outlined text-base">logout</span>
+    </button>
+  </div>
+</header>
+
+<!-- MAIN -->
+<main class="ml-60 pt-20">
+
+  <!-- ======================== APŽVALGA ======================== -->
+  <section id="page-dashboard" class="page active p-6 space-y-6">
+
+    <!-- Hero -->
+    <div class="hero-gradient rounded-xl p-8 flex justify-between items-center relative overflow-hidden">
+      <div class="relative z-10">
+        <span id="hero-label" class="text-[10px] font-bold text-primary-fixed-dim tracking-widest uppercase mb-2 block font-label">Sistemos būklė</span>
+        <h2 id="hero-title" class="font-headline text-3xl font-extrabold text-white mb-3">Tikrinama...</h2>
+        <p id="hero-desc" class="text-primary-fixed-dim max-w-sm text-sm font-body leading-relaxed"></p>
+      </div>
+      <div class="relative z-10 flex gap-3">
+        <div class="bg-white/10 backdrop-blur-md rounded-xl p-5 text-center border border-white/5 min-w-[100px]">
+          <div id="hero-uptime" class="text-white font-headline text-2xl font-bold">—</div>
+          <div id="hero-uptime-label" class="text-white/60 text-[10px] font-label uppercase">Veikimo laikas</div>
+        </div>
+        <div class="bg-white/10 backdrop-blur-md rounded-xl p-5 text-center border border-white/5 min-w-[100px]">
+          <div id="hero-threats" class="text-white font-headline text-2xl font-bold">—</div>
+          <div id="hero-threats-label" class="text-white/60 text-[10px] font-label uppercase">Grėsmės</div>
+        </div>
+      </div>
+      <div class="absolute right-0 top-0 w-1/3 h-full opacity-20 pointer-events-none">
+        <div class="absolute inset-0" style="background:radial-gradient(circle at center,#006c49,transparent)"></div>
+      </div>
+    </div>
+
+    <!-- Metrikos -->
+    <div class="grid grid-cols-3 gap-6">
+      <!-- Logs -->
+      <div class="bg-surface-container-lowest rounded-xl p-6 shadow-sm transition-transform hover:-translate-y-1">
+        <div class="flex justify-between items-start mb-4">
+          <div class="p-2 bg-surface-container-low rounded-lg">
+            <span class="material-symbols-outlined text-black text-xl">article</span>
+          </div>
+          <span id="metric-logs-badge" class="bg-secondary-container text-on-secondary-container px-2.5 py-0.5 rounded-full text-[10px] font-bold font-label">Normalus</span>
+        </div>
+        <h3 id="metric-logs-label" class="font-headline text-slate-500 font-semibold text-xs mb-1 uppercase tracking-wider">Logs (5 min)</h3>
+        <div class="flex items-end gap-2">
+          <span id="metric-logs-value" class="font-headline text-3xl font-bold">—</span>
+        </div>
+        <div class="mt-4 w-full bg-surface-container-low h-1.5 rounded-full overflow-hidden">
+          <div id="metric-logs-bar" class="bg-black h-full rounded-full transition-all" style="width:0%"></div>
+        </div>
+      </div>
+
+      <!-- Klaidos -->
+      <div class="bg-surface-container-lowest rounded-xl p-6 shadow-sm transition-transform hover:-translate-y-1">
+        <div class="flex justify-between items-start mb-4">
+          <div class="p-2 bg-surface-container-low rounded-lg">
+            <span class="material-symbols-outlined text-black text-xl">error_outline</span>
+          </div>
+          <span id="metric-errors-badge" class="bg-secondary-container text-on-secondary-container px-2.5 py-0.5 rounded-full text-[10px] font-bold font-label">Gerai</span>
+        </div>
+        <h3 id="metric-errors-label" class="font-headline text-slate-500 font-semibold text-xs mb-1 uppercase tracking-wider">Klaidos (5 min)</h3>
+        <div class="flex items-end gap-2">
+          <span id="metric-errors-value" class="font-headline text-3xl font-bold">—</span>
+        </div>
+        <div class="mt-4 w-full bg-surface-container-low h-1.5 rounded-full overflow-hidden">
+          <div id="metric-errors-bar" class="bg-black h-full rounded-full transition-all" style="width:0%"></div>
+        </div>
+      </div>
+
+      <!-- Sparta -->
+      <div class="bg-surface-container-lowest rounded-xl p-6 shadow-sm transition-transform hover:-translate-y-1">
+        <div class="flex justify-between items-start mb-4">
+          <div class="p-2 bg-surface-container-low rounded-lg">
+            <span class="material-symbols-outlined text-black text-xl">speed</span>
+          </div>
+          <span id="metric-rate-badge" class="bg-secondary-container text-on-secondary-container px-2.5 py-0.5 rounded-full text-[10px] font-bold font-label">Normalus</span>
+        </div>
+        <h3 id="metric-rate-label" class="font-headline text-slate-500 font-semibold text-xs mb-1 uppercase tracking-wider">Logs / val</h3>
+        <div class="flex items-end gap-2">
+          <span id="metric-rate-value" class="font-headline text-3xl font-bold">—</span>
+        </div>
+        <div class="mt-4 w-full bg-surface-container-low h-1.5 rounded-full overflow-hidden">
+          <div id="metric-rate-bar" class="bg-black h-full rounded-full transition-all" style="width:0%"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Įvykiai + Grafikas -->
+    <div class="grid grid-cols-2 gap-6">
+
+      <!-- Svarbiausi įvykiai -->
+      <div class="bg-surface-container-lowest rounded-xl p-6 shadow-sm">
+        <div class="flex justify-between items-center mb-6">
+          <h3 id="key-events-title" class="font-headline text-lg font-bold">Svarbiausi įvykiai</h3>
+          <button onclick="navigate('anomalies')"
+            class="text-on-primary-container hover:text-black transition-colors text-xs font-semibold flex items-center gap-1 font-label">
+            <span id="view-all-label">Žiūrėti visus</span>
+            <span class="material-symbols-outlined text-xs">arrow_forward</span>
+          </button>
+        </div>
+        <div id="key-events-list" class="space-y-1">
+          <!-- Rendered by JS -->
+          <div class="skeleton h-12 mb-2"></div>
+          <div class="skeleton h-12 mb-2"></div>
+          <div class="skeleton h-12"></div>
+        </div>
+      </div>
+
+      <!-- Tinklo aktyvumas -->
+      <div class="bg-surface-container-lowest rounded-xl p-6 shadow-sm">
+        <div class="flex justify-between items-center mb-4">
+          <div>
+            <h3 id="network-activity-title" class="font-headline text-lg font-bold">Tinklo aktyvumas</h3>
+            <p id="last-24h-label" class="text-[10px] text-on-surface-variant font-label uppercase">Paskutinės 24 valandos</p>
+          </div>
+          <span class="flex items-center gap-1 text-[10px] font-bold font-label uppercase">
+            <span class="w-2 h-2 rounded-full bg-black"></span>
+            <span id="incoming-label">Įeinantis</span>
+          </span>
+        </div>
+        <div class="chart-wrap">
+          <canvas id="traffic-chart"></canvas>
+        </div>
+        <div class="mt-4 pt-4 border-t border-surface-container flex items-center gap-6">
+          <div>
+            <div id="total-label" class="text-[10px] text-on-surface-variant font-label uppercase">Iš viso</div>
+            <div id="chart-total" class="font-headline font-bold text-sm">— įrašų</div>
+          </div>
+          <div class="h-6 w-px bg-surface-container"></div>
+          <div>
+            <div id="peak-label" class="text-[10px] text-on-surface-variant font-label uppercase">Pikas</div>
+            <div id="chart-peak" class="font-headline font-bold text-sm">—</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ======================== ANOMALIJOS ======================== -->
+  <section id="page-anomalies" class="page p-6 space-y-6">
+
+    <!-- Pulse + šonas -->
+    <div class="grid grid-cols-12 gap-6 items-start">
+
+      <!-- Pulse grafikas -->
+      <div class="col-span-8 bg-surface-container-lowest rounded-xl p-6 shadow-sm">
+        <div class="flex justify-between items-end mb-6">
+          <div>
+            <span id="pulse-monitor-label" class="text-[10px] text-on-surface-variant font-bold uppercase tracking-widest mb-1 block">Tinklo monitoringas</span>
+            <h2 id="pulse-title" class="text-2xl font-extrabold tracking-tight font-headline">Statistinis srauto pulsas</h2>
+          </div>
+          <div class="flex items-center gap-4 text-xs font-medium">
+            <span class="flex items-center gap-1.5 text-secondary">
+              <span class="w-2 h-2 bg-secondary rounded-full"></span>
+              <span id="pulse-normal-label">Normalus</span>
+            </span>
+            <span class="flex items-center gap-1.5 text-error">
+              <span class="w-2 h-2 bg-error rounded-full"></span>
+              <span id="pulse-deviation-label">Nuokrypis</span>
+            </span>
+          </div>
+        </div>
+        <div id="pulse-bars" class="h-48 flex items-end gap-0.5 relative overflow-hidden">
+          <!-- Rendered by JS -->
+        </div>
+        <div id="pulse-times" class="flex justify-between mt-3 text-[10px] text-on-surface-variant font-medium"></div>
+      </div>
+
+      <!-- Šonas -->
+      <div class="col-span-4 space-y-4">
+        <!-- Taisyklės pažeidimas -->
+        <div class="bg-black text-white p-6 rounded-xl relative overflow-hidden shadow-sm">
+          <div class="relative z-10">
+            <h3 id="rule-violation-title-label" class="text-lg font-bold font-headline mb-1">Taisyklės pažeidimas</h3>
+            <p id="rule-violation-desc" class="text-primary-fixed-dim text-xs leading-relaxed mb-4">Aptikti kritiniai įspėjimai.</p>
+            <button onclick="navigate('anomalies')"
+              id="rule-violation-btn"
+              class="px-4 py-1.5 bg-white text-black text-xs font-bold rounded-lg hover:scale-95 transition-transform font-label">
+              Peržiūrėti
+            </button>
+          </div>
+          <div class="absolute -right-6 -bottom-6 opacity-10">
+            <span class="material-symbols-outlined text-[80px]">analytics</span>
+          </div>
+        </div>
+
+        <!-- Tankis -->
+        <div class="bg-surface-container-low p-6 rounded-xl border border-outline-variant/30">
+          <div class="flex items-center justify-between mb-3">
+            <span id="density-label" class="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant font-label">Kritinių įvykių dalis</span>
+            <span id="density-pct" class="text-secondary font-bold text-sm">0%</span>
+          </div>
+          <div class="w-full bg-surface-container-highest h-1.5 rounded-full overflow-hidden">
+            <div id="density-bar" class="bg-secondary h-full transition-all" style="width:0%"></div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Įtartinų įvykių kortelės -->
+    <div id="anomaly-cards" class="grid grid-cols-3 gap-6">
+      <!-- Rendered by JS -->
+    </div>
+
+    <!-- Chronologija -->
+    <div class="bg-surface-container-lowest rounded-xl p-6 shadow-sm">
+      <div class="flex justify-between items-center mb-6">
+        <h2 id="chronology-title" class="text-xl font-extrabold tracking-tight font-headline">Naujausia chronologija</h2>
+        <button class="text-xs font-bold text-black hover:underline font-label" id="view-all-chrono">Žiūrėti viską</button>
+      </div>
+      <div id="chronology-list" class="space-y-0.5">
+        <!-- Rendered by JS -->
+      </div>
+    </div>
+
+  </section>
+
+  <!-- ======================== ĮRENGINIAI ======================== -->
+  <section id="page-devices" class="page p-6 space-y-6">
+
+    <h2 id="devices-page-title" class="text-2xl font-extrabold font-headline">Įrenginiai</h2>
+
+    <!-- Suvestinė -->
+    <div class="grid grid-cols-3 gap-6">
+      <div class="bg-surface-container-lowest rounded-xl p-6 shadow-sm">
+        <div class="p-2 bg-surface-container-low rounded-lg w-fit mb-4">
+          <span class="material-symbols-outlined text-black text-xl">router</span>
+        </div>
+        <h3 id="devices-total-label" class="font-headline text-slate-500 font-semibold text-xs mb-1 uppercase tracking-wider">Iš viso įrenginių</h3>
+        <span id="devices-total" class="font-headline text-3xl font-bold">—</span>
+      </div>
+      <div class="bg-surface-container-lowest rounded-xl p-6 shadow-sm">
+        <div class="p-2 bg-error-container rounded-lg w-fit mb-4">
+          <span class="material-symbols-outlined text-on-error-container text-xl">gpp_bad</span>
+        </div>
+        <h3 id="devices-critical-label" class="font-headline text-slate-500 font-semibold text-xs mb-1 uppercase tracking-wider">Kritiniai</h3>
+        <span id="devices-critical" class="font-headline text-3xl font-bold text-error">—</span>
+      </div>
+      <div class="bg-surface-container-lowest rounded-xl p-6 shadow-sm">
+        <div class="p-2 bg-tertiary-fixed rounded-lg w-fit mb-4">
+          <span class="material-symbols-outlined text-on-tertiary-container text-xl">warning</span>
+        </div>
+        <h3 id="devices-warning-label" class="font-headline text-slate-500 font-semibold text-xs mb-1 uppercase tracking-wider">Įspėjimai</h3>
+        <span id="devices-warning" class="font-headline text-3xl font-bold">—</span>
+      </div>
+    </div>
+
+    <!-- Lentelė -->
+    <div id="devices-empty" class="hidden bg-surface-container-lowest rounded-xl p-12 text-center shadow-sm">
+      <span class="material-symbols-outlined text-5xl text-on-surface-variant block mb-3">router</span>
+      <p id="devices-empty-label" class="text-on-surface-variant text-sm font-label">Įrenginių nerasta</p>
+    </div>
+
+    <div id="devices-table-wrap" class="bg-surface-container-lowest rounded-xl overflow-hidden shadow-sm">
+      <table class="w-full text-sm">
+        <thead>
+          <tr class="bg-surface-container-low border-b border-outline-variant/30">
+            <th id="th-ip" class="text-left px-6 py-3 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant font-label">IP / Hostname</th>
+            <th id="th-count" class="text-left px-6 py-3 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant font-label">Įspėjimai</th>
+            <th id="th-worst" class="text-left px-6 py-3 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant font-label">Blogiausia</th>
+          </tr>
+        </thead>
+        <tbody id="devices-tbody">
+          <tr><td colspan="3" class="px-6 py-8 text-center text-on-surface-variant text-sm">
+            <div class="skeleton h-4 w-1/2 mx-auto mb-2"></div>
+            <div class="skeleton h-4 w-1/3 mx-auto"></div>
+          </td></tr>
+        </tbody>
+      </table>
+    </div>
+
+  </section>
+
+  <!-- ======================== PRANEŠIMAI ======================== -->
+  <section id="page-messages" class="page p-6 space-y-6">
+    <h2 id="messages-page-title" class="text-2xl font-extrabold font-headline">Pranešimų nustatymai</h2>
+    <div class="bg-surface-container-lowest rounded-xl p-16 text-center shadow-sm">
+      <div class="w-20 h-20 bg-surface-container-high rounded-2xl flex items-center justify-center mx-auto mb-6">
+        <span class="material-symbols-outlined text-4xl text-on-surface-variant">notifications_active</span>
+      </div>
+      <h3 id="messages-soon-title" class="font-headline text-xl font-bold mb-3">Pranešimų nustatymai bus pridėti netrukus</h3>
+      <p id="messages-soon-desc" class="text-on-surface-variant text-sm font-body max-w-md mx-auto">
+        Šiame skyriuje galėsite konfigūruoti el. pašto ir webhook pranešimus apie anomalijas.
+      </p>
+    </div>
+  </section>
+
+  <!-- ======================== KOKYBĖ ======================== -->
+  <section id="page-qa" class="page p-6 space-y-6">
+
+    <!-- Header -->
+    <div class="flex justify-between items-center">
+      <h2 id="qa-page-title" class="text-2xl font-extrabold font-headline">Kokybės užtikrinimas</h2>
+      <button id="qa-run-btn" onclick="runQATests()"
+        class="flex items-center gap-2 px-5 py-2 bg-black text-white rounded-xl text-sm font-bold hover:bg-slate-800 transition disabled:opacity-50">
+        <span class="material-symbols-outlined text-base">play_arrow</span>
+        <span id="qa-run-btn-label">Vykdyti testus</span>
+      </button>
+    </div>
+
+    <!-- Summary cards (hidden until first run) -->
+    <div id="qa-summary" class="hidden grid grid-cols-4 gap-4">
+      <div class="bg-surface-container-lowest rounded-xl p-5 shadow-sm text-center">
+        <div id="qa-total-val" class="font-headline text-3xl font-bold">—</div>
+        <div id="qa-total-label" class="text-xs font-label text-on-surface-variant uppercase tracking-wider mt-1">Iš viso</div>
+      </div>
+      <div class="bg-surface-container-lowest rounded-xl p-5 shadow-sm text-center">
+        <div id="qa-passed-val" class="font-headline text-3xl font-bold text-secondary">—</div>
+        <div id="qa-passed-label" class="text-xs font-label text-on-surface-variant uppercase tracking-wider mt-1">Praėjo</div>
+      </div>
+      <div class="bg-surface-container-lowest rounded-xl p-5 shadow-sm text-center">
+        <div id="qa-failed-val" class="font-headline text-3xl font-bold text-error">—</div>
+        <div id="qa-failed-label" class="text-xs font-label text-on-surface-variant uppercase tracking-wider mt-1">Nepraėjo</div>
+      </div>
+      <div class="bg-surface-container-lowest rounded-xl p-5 shadow-sm text-center">
+        <div id="qa-duration-val" class="font-headline text-3xl font-bold">—</div>
+        <div id="qa-duration-label" class="text-xs font-label text-on-surface-variant uppercase tracking-wider mt-1">Trukmė, s</div>
+      </div>
+    </div>
+
+    <!-- Test results table -->
+    <div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
+      <div id="qa-table-wrap">
+        <div class="p-14 text-center text-on-surface-variant">
+          <span class="material-symbols-outlined text-5xl mb-4 block">science</span>
+          <p id="qa-no-results-label" class="text-sm font-label">Paspauskite „Vykdyti testus"</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Known defects -->
+    <div>
+      <h3 id="qa-defects-title" class="text-lg font-bold font-headline mb-4">Žinomi defektai</h3>
+      <div id="qa-defects-list">
+        <div class="skeleton h-20 rounded-xl"></div>
+      </div>
+    </div>
+
+  </section>
+
+</main>
+
+<script src="/static/js/chart.min.js"></script>
+<script src="/static/js/app.js"></script>
+</body>
+</html>

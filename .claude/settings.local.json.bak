@@ -1,0 +1,7 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(find '/home/oxshan/Studijos/kursinis/{config' -type f 2>/dev/null)"
+    ]
+  }
+}

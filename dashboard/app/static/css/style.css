@@ -1,0 +1,7 @@
+/* Minimali stilių failas — visos kitos taisyklės yra Tailwind utility klasės */
+
+/* Chart.js canvas dydis */
+.chart-wrap {
+  position: relative;
+  height: 220px;
+}

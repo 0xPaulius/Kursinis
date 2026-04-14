@@ -49,6 +49,7 @@ Kursinis darbas mažoms organizacijoms skirta centralizuota log analizės ir ano
 | Saugykla          | Grafana Loki 3.4  | Efektyvi logų saugykla (label-based)  |
 | Vizualizacija     | Grafana 11.5      | Dashboard'ai, alertai, log naršymas   |
 | Anomalijų apt.    | Python 3.12       | Rule-based, statistinis, ML (IsoForest)|
+| Dashboard         | FastAPI + JS      | Web UI: logų srautas, anomalijos, paieška |
 | Konteinerizacija  | Docker Compose    | Vienodas deployment bet kurioje aplinkoje |
 
 ## Paleidimas
@@ -65,9 +66,16 @@ docker compose up -d
 docker compose --profile dev up -d
 ```
 
-### 3. Tikrinimas
+### 3. Su demo duomenimis (alertai dashboard'e)
 
-- **Grafana**: http://localhost:3000 (admin / admin123)
+```bash
+./seed_demo.sh
+```
+
+### 4. Tikrinimas
+
+- **Dashboard**: http://localhost:8080 (admin / admin123)
+- **Grafana**: http://localhost:3000 (admin / $GF_SECURITY_ADMIN_PASSWORD)
 - **Loki API**: http://localhost:3100/ready
 
 ## Anomalijų aptikimo metodai
@@ -112,27 +120,51 @@ Atsisiųskite NXLog CE ir konfigūruokite:
 </Output>
 ```
 
+## Dashboard (Web UI)
+
+Papildoma žiniatinklio sąsaja šalia Grafana, pasiekiama per `http://localhost:8080`.
+
+- **Technologijos**: FastAPI + Uvicorn (backend), Vanilla JS + Tailwind CSS + Chart.js (frontend)
+- **Kalba**: Lietuvių / Anglų (perjungiama UI)
+- **Prisijungimas**: admin / admin123
+- **Funkcijos**: logų srauto stebėjimas, anomalijų peržiūra, įrenginių sąrašas, paieška, sistemos būklė
+
 ## Failų struktūra
 
 ```
 .
-├── docker-compose.yml              # Pagrindinis Docker Compose
+├── docker-compose.yml               # Pagrindinis Docker Compose
+├── .env                             # Aplinkos kintamieji
 ├── config/
-│   ├── syslog-ng/syslog-ng.conf   # Syslog-ng konfigūracija
-│   ├── loki/loki.yml              # Loki konfigūracija
-│   ├── promtail/promtail.yml      # Promtail konfigūracija
+│   ├── syslog-ng/syslog-ng.conf    # Syslog-ng konfigūracija
+│   ├── loki/loki.yml               # Loki konfigūracija
+│   ├── promtail/promtail.yml       # Promtail konfigūracija
 │   └── grafana/
-│       ├── provisioning/           # Auto-konfigūracija
+│       ├── provisioning/            # Auto-konfigūracija
 │       │   ├── datasources/loki.yml
-│       │   └── dashboards/dashboards.yml
+│       │   ├── dashboards/dashboards.yml
+│       │   └── alerting/alerts.yml
 │       └── dashboards/overview.json # Dashboard JSON
 ├── anomaly-detector/
 │   ├── Dockerfile
 │   ├── requirements.txt
-│   └── detector.py                 # Anomalijų aptikimo modulis
+│   └── detector.py                  # Anomalijų aptikimo modulis
+├── dashboard/
+│   ├── Dockerfile
+│   ├── requirements.txt
+│   ├── app/
+│   │   ├── main.py                  # FastAPI aplikacija
+│   │   ├── routers/                 # API maršrutai (auth, traffic, alerts, health)
+│   │   ├── services/                # Loki klientas, alertų skaitytuvas, health checker
+│   │   ├── models/schemas.py        # Pydantic modeliai
+│   │   └── static/                  # HTML, CSS, JS
+│   └── tests/                       # Pytest testai
+├── demo_data/
+│   └── anomaly_history.json         # Demo alertų duomenys
 ├── log-generator/
 │   ├── Dockerfile
-│   └── generator.py                # Testinių logų generatorius
+│   └── generator.py                 # Testinių logų generatorius
+├── seed_demo.sh                     # Demo duomenų įkėlimo skriptas
 └── README.md
 ```
 

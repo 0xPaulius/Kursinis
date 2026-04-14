@@ -1,6 +1,29 @@
-.env
-*.log
+LaTex/
+
+# Python bytecode and caches
 __pycache__/
-*.pyc
-CLAUDE.md
-.claude/
+*.py[cod]
+*.pyo
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+
+# Virtual environments
+.venv/
+venv/
+env/
+
+# Editor and OS noise
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Local logs and runtime files
+*.log
+
+# Coursework/export artifacts (kept outside git)
+*.docx
+*.pdf
+*.zip

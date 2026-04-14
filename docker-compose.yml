@@ -131,9 +131,34 @@ services:
       timeout: 10s
       retries: 3
       start_period: 60s
+    profiles:
+      - anomaly   # docker compose --profile anomaly up -d
 
   # ============================================================
-  # 6. LOG GENERATOR - Testinių logų generatorius (DEV ONLY)
+  # 6. DASHBOARD - Stebėjimo pultas (vartotojo sąsaja)
+  #    Paprasta lietuviška web UI žurnalams ir įspėjimams peržiūrėti
+  # ============================================================
+  dashboard:
+    build:
+      context: ./dashboard
+      dockerfile: Dockerfile
+    container_name: dashboard
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - LOKI_URL=http://loki:3100
+      - ANOMALY_DB_PATH=/data/anomaly_history.json
+    volumes:
+      - anomaly-data:/data:ro
+    networks:
+      - lognet
+    depends_on:
+      loki:
+        condition: service_healthy
+
+  # ============================================================
+  # 7. LOG GENERATOR - Testinių logų generatorius (DEV ONLY)
   #    Generuoja realistiškus logus testavimui
   #    Pašalinti production aplinkoje!
   # ============================================================

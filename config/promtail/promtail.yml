@@ -30,7 +30,7 @@ scrape_configs:
       # Parserinam syslog-ng šablono formatą:
       # 2024-01-15T10:30:00+02:00 hostname facility.severity program[pid]: message
       - regex:
-          expression: '^(?P<timestamp>\S+)\s+(?P<host>\S+)\s+(?P<facility>\w+)\.(?P<severity>\w+)\s+(?P<program>[^\[]+)\[(?P<pid>\d+)\]:\s+(?P<message>.+)$'
+          expression: '^(?P<timestamp>\S+)\s+(?P<host>\S+)\s+(?P<facility>\w+)\.(?P<severity>\w+)\s+(?P<program>[^\[]+)\[(?P<pid>\d*)\]:\s+(?P<message>.+)$'
       - labels:
           host:
           facility:
@@ -51,7 +51,7 @@ scrape_configs:
           __path__: /var/log/syslog-ng/security.log
     pipeline_stages:
       - regex:
-          expression: '^(?P<timestamp>\S+)\s+(?P<host>\S+)\s+(?P<facility>\w+)\.(?P<severity>\w+)\s+(?P<program>[^\[]+)\[(?P<pid>\d+)\]:\s+(?P<message>.+)$'
+          expression: '^(?P<timestamp>\S+)\s+(?P<host>\S+)\s+(?P<facility>\w+)\.(?P<severity>\w+)\s+(?P<program>[^\[]+)\[(?P<pid>\d*)\]:\s+(?P<message>.+)$'
       - labels:
           host:
           facility:
@@ -72,7 +72,7 @@ scrape_configs:
           __path__: /var/log/syslog-ng/errors.log
     pipeline_stages:
       - regex:
-          expression: '^(?P<timestamp>\S+)\s+(?P<host>\S+)\s+(?P<facility>\w+)\.(?P<severity>\w+)\s+(?P<program>[^\[]+)\[(?P<pid>\d+)\]:\s+(?P<message>.+)$'
+          expression: '^(?P<timestamp>\S+)\s+(?P<host>\S+)\s+(?P<facility>\w+)\.(?P<severity>\w+)\s+(?P<program>[^\[]+)\[(?P<pid>\d*)\]:\s+(?P<message>.+)$'
       - labels:
           host:
           severity:
