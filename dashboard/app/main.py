@@ -18,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.routers import traffic, alerts, health, auth
+from app.routers import traffic, alerts, health, auth, qa
 from app.services.loki_client import AsyncLokiClient
 from app.services.health_checker import HealthChecker
 
@@ -57,7 +57,7 @@ app = FastAPI(
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_methods=["GET"],
+    allow_methods=["GET", "POST"],
     allow_headers=["*"],
 )
 
@@ -66,6 +66,7 @@ app.include_router(auth.router)
 app.include_router(traffic.router)
 app.include_router(alerts.router)
 app.include_router(health.router)
+app.include_router(qa.router)
 
 # Statiniai failai
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

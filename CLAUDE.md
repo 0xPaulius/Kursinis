@@ -4,41 +4,53 @@ Centralized log analysis and anomaly detection system for small organizations.
 Academic coursework (kursinis darbas, Vilnius University ISKS).
 
 ## Stack
-syslog-ng 4.8 → Promtail 3.4 → Loki 3.4 → Grafana 11.5 + Python 3.12 anomaly detector.
+syslog-ng 4.8 → Promtail 3.4 → Loki 3.4 → Grafana 11.5 + Python 3.12 anomaly detector + FastAPI dashboard.
 Everything containerized in Docker Compose.
 
 ## Structure
 ```
-docker-compose.yml                  — 6 services (syslog-ng, promtail, loki, grafana, anomaly-detector, log-generator)
-config/syslog-ng/syslog-ng.conf    — syslog receiver, filters, destinations
-config/loki/loki.yml               — storage, retention (30d), schema
-config/promtail/promtail.yml       — regex parsing, label extraction
-config/grafana/provisioning/       — auto datasource + dashboard provider
-config/grafana/dashboards/         — dashboard JSON files
-anomaly-detector/detector.py       — 3-layer detection (rule, statistical, ML)
-anomaly-detector/Dockerfile        — Python 3.12-slim
-anomaly-detector/requirements.txt  — requests, numpy, scikit-learn
-log-generator/generator.py         — realistic syslog simulator with attack scenarios
+docker-compose.yml — 7 services (syslog-ng, promtail, loki, grafana, anomaly-detector, dashboard, log-generator)
+config/syslog-ng/syslog-ng.conf     — syslog receiver, filters, destinations
+config/loki/loki.yml                — storage, retention (30d), schema
+config/promtail/promtail.yml        — regex parsing, label extraction
+config/grafana/provisioning/        — auto datasource + dashboard provider
+config/grafana/dashboards/          — dashboard JSON files
+anomaly-detector/detector.py        — 3-layer detection (rule, statistical, ML)
+anomaly-detector/Dockerfile
+anomaly-detector/requirements.txt   — requests, numpy, scikit-learn
+dashboard/app/main.py               — FastAPI app (serves UI + REST API)
+dashboard/app/routers/              — auth, traffic, alerts, health API routes
+dashboard/app/services/             — loki_client, alert_reader, health_checker
+dashboard/app/static/               — HTML, CSS, JS (Tailwind + Chart.js)
+dashboard/app/models/schemas.py     — Pydantic response models
+dashboard/Dockerfile                — Python 3.12-slim + uvicorn
+dashboard/tests/                    — pytest tests (alert_reader, routes)
+demo_data/anomaly_history.json      — seed alert data for demo/testing
+log-generator/generator.py          — realistic syslog simulator with attack scenarios
 log-generator/Dockerfile
 ```
 
 ## Commands
 - `docker compose up -d` — production (no test data)
 - `docker compose --profile dev up -d` — with log generator
+- `docker compose --profile anomaly up -d` — with anomaly detector
 - `docker compose down -v` — teardown with volumes
 - `docker compose logs -f anomaly-detector` — watch detections
-- `docker compose restart anomaly-detector` — apply code changes
+- `docker compose restart dashboard` — apply dashboard code changes
+- `./seed_demo.sh` — load demo alert data into dashboard
 
 ## Ports
 - 514/TCP,UDP — syslog input from network
 - 3100 — Loki API (internal)
-- 3000 — Grafana UI (admin / admin123)
+- 3000 — Grafana UI (admin / $GF_SECURITY_ADMIN_PASSWORD)
+- 8080 — Dashboard web UI (admin / admin123)
 
 ## Code Style
 - Python: type hints, dataclasses, f-strings, docstrings
 - Academic comments in Lithuanian, technical in English
 - YAML configs for Loki/Promtail/Grafana, native syntax for syslog-ng
 - Grafana: JSON provisioned dashboards, Europe/Vilnius timezone
+- Dashboard: FastAPI + Vanilla JS + Tailwind CSS, i18n (LT/EN)
 
 ## Key Architecture Decisions
 - syslog-ng writes files → Promtail reads them (shared Docker volume `syslog-ng-logs`)
@@ -47,6 +59,8 @@ log-generator/Dockerfile
 - Anomaly detector queries Loki HTTP API (`/loki/api/v1/query_range`)
 - ML detector (IsolationForest) trains after ≥20 samples, runs every 5th cycle
 - Log generator only with `--profile dev` — never in production
+- Dashboard reads Loki API for live traffic + anomaly_history.json for alerts (shared volume `anomaly-data`)
+- Dashboard auth: client-side sessionStorage token, demo credentials only
 
 ## Anomaly Detection Layers (detector.py)
 1. `RuleBasedDetector` — SSH brute-force (≥5 failures/5min/IP), invalid user scanning (≥3 usernames/IP), firewall spike (>50 DROP)

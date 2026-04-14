@@ -6,6 +6,7 @@
 <title>Logų analizė</title>
 <script src="/static/js/tailwind.min.js"></script>
 <link rel="stylesheet" href="/static/fonts/fonts.css">
+<link rel="stylesheet" href="/static/css/style.css">
 <script>
 tailwind.config = {
   theme: {
@@ -70,7 +71,6 @@ tailwind.config = {
   .nav-btn.active { background:#fff; box-shadow:0 1px 3px rgba(0,0,0,.1); transform:translateX(4px); font-weight:600; color:#0f172a; }
   .nav-btn.active .nav-icon { font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24; }
   .nav-btn:not(.active) { color:#64748b; }
-  .chart-wrap { position:relative; height:200px; }
   .skeleton { background:linear-gradient(90deg,#e2e8f0 25%,#f1f5f9 50%,#e2e8f0 75%); background-size:200% 100%; animation:shimmer 1.5s infinite; border-radius:6px; }
   @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
 </style>
@@ -105,6 +105,10 @@ tailwind.config = {
     <button class="nav-btn" id="nav-messages" onclick="navigate('messages')">
       <span class="material-symbols-outlined nav-icon text-xl">notifications_active</span>
       <span id="nav-label-messages" class="text-sm font-label">Pranešimai</span>
+    </button>
+    <button class="nav-btn" id="nav-qa" onclick="navigate('qa')">
+      <span class="material-symbols-outlined nav-icon text-xl">science</span>
+      <span id="nav-label-qa" class="text-sm font-label">Kokybė</span>
     </button>
   </nav>
 
@@ -351,11 +355,6 @@ tailwind.config = {
       </div>
     </div>
 
-    <!-- FAB -->
-    <button class="fixed bottom-8 right-8 w-14 h-14 bg-black text-white rounded-2xl shadow-2xl flex items-center justify-center hover:scale-110 transition-transform z-50">
-      <span class="material-symbols-outlined text-2xl">add</span>
-    </button>
-
   </section>
 
   <!-- ======================== ĮRENGINIAI ======================== -->
@@ -426,6 +425,59 @@ tailwind.config = {
         Šiame skyriuje galėsite konfigūruoti el. pašto ir webhook pranešimus apie anomalijas.
       </p>
     </div>
+  </section>
+
+  <!-- ======================== KOKYBĖ ======================== -->
+  <section id="page-qa" class="page p-6 space-y-6">
+
+    <!-- Header -->
+    <div class="flex justify-between items-center">
+      <h2 id="qa-page-title" class="text-2xl font-extrabold font-headline">Kokybės užtikrinimas</h2>
+      <button id="qa-run-btn" onclick="runQATests()"
+        class="flex items-center gap-2 px-5 py-2 bg-black text-white rounded-xl text-sm font-bold hover:bg-slate-800 transition disabled:opacity-50">
+        <span class="material-symbols-outlined text-base">play_arrow</span>
+        <span id="qa-run-btn-label">Vykdyti testus</span>
+      </button>
+    </div>
+
+    <!-- Summary cards (hidden until first run) -->
+    <div id="qa-summary" class="hidden grid grid-cols-4 gap-4">
+      <div class="bg-surface-container-lowest rounded-xl p-5 shadow-sm text-center">
+        <div id="qa-total-val" class="font-headline text-3xl font-bold">—</div>
+        <div id="qa-total-label" class="text-xs font-label text-on-surface-variant uppercase tracking-wider mt-1">Iš viso</div>
+      </div>
+      <div class="bg-surface-container-lowest rounded-xl p-5 shadow-sm text-center">
+        <div id="qa-passed-val" class="font-headline text-3xl font-bold text-secondary">—</div>
+        <div id="qa-passed-label" class="text-xs font-label text-on-surface-variant uppercase tracking-wider mt-1">Praėjo</div>
+      </div>
+      <div class="bg-surface-container-lowest rounded-xl p-5 shadow-sm text-center">
+        <div id="qa-failed-val" class="font-headline text-3xl font-bold text-error">—</div>
+        <div id="qa-failed-label" class="text-xs font-label text-on-surface-variant uppercase tracking-wider mt-1">Nepraėjo</div>
+      </div>
+      <div class="bg-surface-container-lowest rounded-xl p-5 shadow-sm text-center">
+        <div id="qa-duration-val" class="font-headline text-3xl font-bold">—</div>
+        <div id="qa-duration-label" class="text-xs font-label text-on-surface-variant uppercase tracking-wider mt-1">Trukmė, s</div>
+      </div>
+    </div>
+
+    <!-- Test results table -->
+    <div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
+      <div id="qa-table-wrap">
+        <div class="p-14 text-center text-on-surface-variant">
+          <span class="material-symbols-outlined text-5xl mb-4 block">science</span>
+          <p id="qa-no-results-label" class="text-sm font-label">Paspauskite „Vykdyti testus"</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- Known defects -->
+    <div>
+      <h3 id="qa-defects-title" class="text-lg font-bold font-headline mb-4">Žinomi defektai</h3>
+      <div id="qa-defects-list">
+        <div class="skeleton h-20 rounded-xl"></div>
+      </div>
+    </div>
+
   </section>
 
 </main>
