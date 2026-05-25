@@ -6,7 +6,7 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 from fastapi.testclient import TestClient
 
-from app.dependencies import require_auth
+from app.dependencies import get_alert_reader, get_health_checker, get_loki, require_auth
 from app.main import app
 from app.models.schemas import (
     HealthStatus, ServiceHealth, TrafficCurrent, TrafficHistory, TrafficPoint,
@@ -49,11 +49,12 @@ def mock_alert_reader():
 
 @pytest.fixture()
 def client(mock_loki, mock_health_checker, mock_alert_reader):
-    app.state.loki = mock_loki
-    app.state.health_checker = mock_health_checker
-    app.state.alert_reader = mock_alert_reader
-    # Pakeičiame auth dependency į no-op — testai netikrina autentifikacijos.
+    # Override visas DI per `dependency_overrides` — taip mock'ai išlieka
+    # net jei lifespan iš naujo inicializuoja app.state.
     app.dependency_overrides[require_auth] = lambda: None
+    app.dependency_overrides[get_loki] = lambda: mock_loki
+    app.dependency_overrides[get_health_checker] = lambda: mock_health_checker
+    app.dependency_overrides[get_alert_reader] = lambda: mock_alert_reader
     with TestClient(app) as c:
         yield c
     app.dependency_overrides.clear()
@@ -150,48 +151,39 @@ class TestRootRoute:
 
 
 class TestAuthEnforcement:
-    """API maršrutai turi grąžinti 401 be Authorization antraštės."""
+    """API maršrutai turi grąžinti 401 be Authorization antraštės.
+    Šie testai NEAR naudoja `client` fixture — joje auth yra apeinama."""
 
-    def test_health_requires_auth(self, mock_loki, mock_health_checker, mock_alert_reader):
-        app.state.loki = mock_loki
-        app.state.health_checker = mock_health_checker
-        app.state.alert_reader = mock_alert_reader
+    @pytest.fixture()
+    def raw_client(self, mock_loki, mock_health_checker, mock_alert_reader):
+        # Tas pats DI override, bet BE require_auth — kad testuoti tikrą auth elgseną.
+        app.dependency_overrides[get_loki] = lambda: mock_loki
+        app.dependency_overrides[get_health_checker] = lambda: mock_health_checker
+        app.dependency_overrides[get_alert_reader] = lambda: mock_alert_reader
         with TestClient(app) as c:
-            assert c.get("/api/health/status").status_code == 401
+            yield c
+        app.dependency_overrides.clear()
 
-    def test_traffic_requires_auth(self, mock_loki, mock_health_checker, mock_alert_reader):
-        app.state.loki = mock_loki
-        app.state.health_checker = mock_health_checker
-        app.state.alert_reader = mock_alert_reader
-        with TestClient(app) as c:
-            assert c.get("/api/traffic/current").status_code == 401
-            assert c.get("/api/traffic/history").status_code == 401
+    def test_health_requires_auth(self, raw_client):
+        assert raw_client.get("/api/health/status").status_code == 401
 
-    def test_alerts_requires_auth(self, mock_loki, mock_health_checker, mock_alert_reader):
-        app.state.loki = mock_loki
-        app.state.health_checker = mock_health_checker
-        app.state.alert_reader = mock_alert_reader
-        with TestClient(app) as c:
-            assert c.get("/api/alerts/recent").status_code == 401
-            assert c.get("/api/alerts/history").status_code == 401
+    def test_traffic_requires_auth(self, raw_client):
+        assert raw_client.get("/api/traffic/current").status_code == 401
+        assert raw_client.get("/api/traffic/history").status_code == 401
 
-    def test_valid_token_unlocks_api(self, mock_loki, mock_health_checker, mock_alert_reader):
+    def test_alerts_requires_auth(self, raw_client):
+        assert raw_client.get("/api/alerts/recent").status_code == 401
+        assert raw_client.get("/api/alerts/history").status_code == 401
+
+    def test_valid_token_unlocks_api(self, raw_client):
         from app.routers.auth import _token_for
-        app.state.loki = mock_loki
-        app.state.health_checker = mock_health_checker
-        app.state.alert_reader = mock_alert_reader
-        with TestClient(app) as c:
-            headers = {"Authorization": f"Bearer {_token_for('admin')}"}
-            assert c.get("/api/health/status", headers=headers).status_code == 200
+        headers = {"Authorization": f"Bearer {_token_for('admin')}"}
+        assert raw_client.get("/api/health/status", headers=headers).status_code == 200
 
-    def test_login_success_and_failure(self, mock_loki, mock_health_checker, mock_alert_reader):
-        app.state.loki = mock_loki
-        app.state.health_checker = mock_health_checker
-        app.state.alert_reader = mock_alert_reader
-        with TestClient(app) as c:
-            ok = c.post("/api/auth/login", json={"username": "admin", "password": "admin123"})
-            assert ok.status_code == 200
-            assert ok.json()["token"]
+    def test_login_success_and_failure(self, raw_client):
+        ok = raw_client.post("/api/auth/login", json={"username": "admin", "password": "admin123"})
+        assert ok.status_code == 200
+        assert ok.json()["token"]
 
-            bad = c.post("/api/auth/login", json={"username": "admin", "password": "wrong"})
-            assert bad.status_code == 401
+        bad = raw_client.post("/api/auth/login", json={"username": "admin", "password": "wrong"})
+        assert bad.status_code == 401
