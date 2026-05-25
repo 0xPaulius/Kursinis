@@ -11,7 +11,7 @@
       "description": "Visų logų kiekis per laiko intervalą",
       "type": "timeseries",
       "gridPos": { "h": 8, "w": 24, "x": 0, "y": 0 },
-      "datasource": { "type": "loki", "uid": "" },
+      "datasource": { "type": "loki", "uid": "loki" },
       "targets": [
         {
           "expr": "sum(count_over_time({job=\"syslog\"} [1m]))",
@@ -56,7 +56,7 @@
       "title": "Logai pagal severity",
       "type": "piechart",
       "gridPos": { "h": 8, "w": 8, "x": 0, "y": 8 },
-      "datasource": { "type": "loki", "uid": "" },
+      "datasource": { "type": "loki", "uid": "loki" },
       "targets": [
         {
           "expr": "sum by (severity) (count_over_time({job=\"syslog\"} | severity != \"\" [$__range]))",
@@ -69,7 +69,7 @@
       "title": "Top 10 šaltinių (hosts)",
       "type": "bargauge",
       "gridPos": { "h": 8, "w": 8, "x": 8, "y": 8 },
-      "datasource": { "type": "loki", "uid": "" },
+      "datasource": { "type": "loki", "uid": "loki" },
       "options": {
         "orientation": "horizontal",
         "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": true },
@@ -92,7 +92,7 @@
       "title": "Top programos",
       "type": "bargauge",
       "gridPos": { "h": 8, "w": 8, "x": 16, "y": 8 },
-      "datasource": { "type": "loki", "uid": "" },
+      "datasource": { "type": "loki", "uid": "loki" },
       "options": {
         "orientation": "horizontal",
         "reduceOptions": { "calcs": ["lastNotNull"], "fields": "", "values": true },
@@ -116,7 +116,7 @@
       "description": "Failed SSH login bandymai per laiką",
       "type": "timeseries",
       "gridPos": { "h": 8, "w": 12, "x": 0, "y": 16 },
-      "datasource": { "type": "loki", "uid": "" },
+      "datasource": { "type": "loki", "uid": "loki" },
       "targets": [
         {
           "expr": "sum by (host) (count_over_time({job=\"syslog\"} |= \"Failed password\" [5m]))",
@@ -144,7 +144,7 @@
       "description": "Blokuoti paketai ugniasienėje",
       "type": "timeseries",
       "gridPos": { "h": 8, "w": 12, "x": 12, "y": 16 },
-      "datasource": { "type": "loki", "uid": "" },
+      "datasource": { "type": "loki", "uid": "loki" },
       "targets": [
         {
           "expr": "sum(count_over_time({job=\"syslog\"} |~ \"DROP|REJECT\" [5m]))",
@@ -164,7 +164,7 @@
       "description": "Realaus laiko saugumo logų srautas",
       "type": "logs",
       "gridPos": { "h": 10, "w": 24, "x": 0, "y": 24 },
-      "datasource": { "type": "loki", "uid": "" },
+      "datasource": { "type": "loki", "uid": "loki" },
       "targets": [
         {
           "expr": "{job=\"security\"}",

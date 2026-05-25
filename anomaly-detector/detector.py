@@ -23,22 +23,21 @@ Kursinis darbas: Centralizuota žurnalų analizės ir anomalijų
                  aptikimo sistema mažoms organizacijoms
 """
 
-import os
-import sys
-import json
-import time
-import logging
 import datetime
+import json
+import logging
+import os
 import re
-from collections import Counter, defaultdict
+import signal
+import sys
+import time
+from collections import Counter, defaultdict, deque
 from dataclasses import dataclass, field
 from typing import Optional
 
-import signal
-
 import joblib
-import requests
 import numpy as np
+import requests
 from sklearn.ensemble import IsolationForest
 
 # ============================================================
@@ -249,29 +248,34 @@ class RuleBasedDetector:
         )
 
         user_pattern = re.compile(r"Invalid user\s+(\S+)\s+from\s+(\d+\.\d+\.\d+\.\d+)")
-        attempts: dict[str, list] = defaultdict(list)
+        # Atskiriame unikalius vardus (skenavimas) nuo pakartotinių (brute-force vienam vartotojui)
+        users_by_ip: dict[str, set[str]] = defaultdict(set)
+        attempts_by_ip: Counter = Counter()
 
         for entry in lines:
             match = user_pattern.search(entry["line"])
             if match:
                 user, ip = match.group(1), match.group(2)
-                attempts[ip].append(user)
+                users_by_ip[ip].add(user)
+                attempts_by_ip[ip] += 1
 
-        for ip, users in attempts.items():
-            if len(users) >= 3:
+        for ip, users in users_by_ip.items():
+            unique_user_count = len(users)
+            if unique_user_count >= 3:
                 alerts.append(Alert(
                     timestamp=now.isoformat(),
                     severity="high",
                     detection_method="rule",
                     alert_type="invalid_user_scan",
                     description=(
-                        f"Vartotojų skenavimas aptiktas: {len(users)} skirtingi "
+                        f"Vartotojų skenavimas aptiktas: {unique_user_count} skirtingi "
                         f"vartotojų vardai iš IP {ip}"
                     ),
                     source_ip=ip,
                     details={
-                        "usernames_tried": list(set(users)),
-                        "attempt_count": len(users),
+                        "usernames_tried": sorted(users),
+                        "unique_username_count": unique_user_count,
+                        "attempt_count": attempts_by_ip[ip],
                     },
                 ))
 
@@ -344,16 +348,19 @@ class StatisticalDetector:
             end=now,
         )
         current_count = float(len(lines))
-        self._update_baseline(current_count)
 
+        # Reikia bent 5 istorinių įrašų PRIEŠ dabartinį tikrinimą — kitaip
+        # standartinis nuokrypis neturi prasmės. Baseline atnaujiname po
+        # tikrinimo, kad gate'as būtų tikslus.
         if len(self.baseline_history) < 5:
             logger.info(
                 f"Renkamas baseline: {len(self.baseline_history)}/5 "
                 f"(dabartinis: {current_count:.0f})"
             )
+            self._update_baseline(current_count)
             return alerts
 
-        arr = np.array(self.baseline_history[:-1])  # Be dabartinės reikšmės
+        arr = np.array(self.baseline_history)
         mean = np.mean(arr)
         std = np.std(arr)
 
@@ -380,6 +387,8 @@ class StatisticalDetector:
                     },
                 ))
 
+        # Baseline atnaujiname po tikrinimo — current_count netraukiamas į savo paties matavimą.
+        self._update_baseline(current_count)
         return alerts
 
     def check_error_rate(self, window_minutes: int = 5) -> list[Alert]:
@@ -436,7 +445,8 @@ class MLDetector:
             n_estimators=100,
         )
         self.is_trained = False
-        self.training_data: list[list[float]] = []
+        # deque(maxlen=...) automatiškai išmeta seniausius įrašus — nereikia kopijuoti sąrašo.
+        self.training_data: deque[list[float]] = deque(maxlen=500)
         self.min_training_samples = 20
         self._load_model()
 
@@ -444,7 +454,9 @@ class MLDetector:
         """Įkelia išsaugotą modelį ir treniravimo duomenis iš disko."""
         if os.path.exists(TRAINING_DATA_PATH):
             try:
-                self.training_data = joblib.load(TRAINING_DATA_PATH)
+                loaded = joblib.load(TRAINING_DATA_PATH)
+                # Diske saugomas list — atkuriame į deque su tuo pačiu maxlen.
+                self.training_data = deque(loaded, maxlen=self.training_data.maxlen)
                 logger.info(f"Įkelti {len(self.training_data)} treniravimo įrašai iš disko")
             except Exception as e:
                 logger.warning(f"Treniravimo duomenų įkėlimo klaida: {e}")
@@ -461,7 +473,8 @@ class MLDetector:
         """Išsaugo treniruotą modelį ir treniravimo duomenis į diską."""
         try:
             joblib.dump(self.model, MODEL_PATH)
-            joblib.dump(self.training_data, TRAINING_DATA_PATH)
+            # joblib gali serializuoti ir deque, bet list — portatyvesnis tarp versijų.
+            joblib.dump(list(self.training_data), TRAINING_DATA_PATH)
         except Exception as e:
             logger.warning(f"Modelio išsaugojimo klaida: {e}")
 
@@ -536,14 +549,13 @@ class MLDetector:
         if not host_features:
             return alerts
 
-        # Kaupiame training duomenis (immutable replacement)
-        new_data = self.training_data + list(host_features.values())
-        self.training_data = new_data[-500:]
+        # Kaupiame training duomenis — deque automatiškai apriboja iki maxlen.
+        self.training_data.extend(host_features.values())
 
         # Treniruojame modelį kai turime pakankamai duomenų
         if len(self.training_data) >= self.min_training_samples:
             try:
-                X_train = np.array(self.training_data)
+                X_train = np.array(list(self.training_data))
                 self.model.fit(X_train)
                 self.is_trained = True
                 self._save_model()
@@ -631,8 +643,11 @@ class AlertSender:
                 logger.error(f"Webhook siuntimo klaida: {e}")
 
     def save_history(self, alerts: list[Alert]):
-        """Saugo alertų istoriją į failą."""
-        history = []
+        """
+        Saugo alertų istoriją į failą atominiu rašymu (temp + os.replace),
+        kad SIGKILL ar disko trūkumo metu failas nebūtų sugadintas.
+        """
+        history: list[dict] = []
         try:
             if os.path.exists(ANOMALY_DB_PATH):
                 with open(ANOMALY_DB_PATH, "r") as f:
@@ -647,9 +662,14 @@ class AlertSender:
         history = history[-1000:]
 
         try:
-            os.makedirs(os.path.dirname(ANOMALY_DB_PATH), exist_ok=True)
-            with open(ANOMALY_DB_PATH, "w") as f:
+            db_dir = os.path.dirname(ANOMALY_DB_PATH)
+            os.makedirs(db_dir, exist_ok=True)
+            tmp_path = f"{ANOMALY_DB_PATH}.tmp"
+            with open(tmp_path, "w") as f:
                 json.dump(history, f, indent=2, ensure_ascii=False)
+                f.flush()
+                os.fsync(f.fileno())
+            os.replace(tmp_path, ANOMALY_DB_PATH)
         except IOError as e:
             logger.error(f"Istorijos rašymo klaida: {e}")
 
@@ -709,7 +729,8 @@ def main():
 
         # Heartbeat failas healthcheck'ui
         try:
-            open("/tmp/detector.alive", "w").close()
+            with open("/tmp/detector.alive", "w"):
+                pass
         except OSError:
             pass
 
