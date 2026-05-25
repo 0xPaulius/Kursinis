@@ -7,35 +7,24 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import subprocess
 import tempfile
 import time
 from typing import Any
 
-from fastapi import APIRouter
+from fastapi import APIRouter, Depends
 from fastapi.responses import JSONResponse
 
-router = APIRouter(prefix="/api/qa", tags=["qa"])
+from app.dependencies import require_auth
 
-# Žinomi atviri defektai
-_KNOWN_DEFECTS: list[dict[str, Any]] = [
-    {
-        "id": "DEF-001",
-        "name": "Search result count displayed in Lithuanian regardless of selected UI language",
-        "severity": "Minor",
-        "priority": "Low",
-        "status": "Open",
-        "component": "app.js:731 (search count renderer)",
-        "steps": [
-            "Log in (admin / admin123)",
-            "Click the EN button at the bottom of the sidebar",
-            "Type any search query (e.g. ssh) in the top search bar",
-            "Observe the result count indicator next to the search field",
-        ],
-        "expected": "Count displayed in English: \"X results\"",
-        "actual": "Count displayed in Lithuanian: \"X rezultatų\" — i18n not applied to count string",
-    }
-]
+router = APIRouter(prefix="/api/qa", tags=["qa"], dependencies=[Depends(require_auth)])
+
+_qa_lock = asyncio.Lock()
+_PYTEST_TIMEOUT_SECONDS = 120
+
+# Žinomi atviri defektai (uždarius — pašalinti iš sąrašo)
+_KNOWN_DEFECTS: list[dict[str, Any]] = []
 
 # Paskutiniai testo rezultatai (saugomi atmintyje tarp užklausų)
 _last_results: dict[str, Any] | None = None
@@ -46,64 +35,95 @@ def _blocking_pytest_run() -> dict[str, Any]:
     with tempfile.NamedTemporaryFile(suffix=".json", delete=False) as fh:
         report_path = fh.name
 
-    t0 = time.monotonic()
-    proc = subprocess.run(
-        [
-            "pytest", "tests/", "-v",
-            "--tb=short",
-            "--json-report",
-            f"--json-report-file={report_path}",
-        ],
-        capture_output=True,
-        text=True,
-        cwd="/app",
-    )
-    elapsed = round(time.monotonic() - t0, 2)
-
     try:
-        with open(report_path, encoding="utf-8") as fh:
-            report = json.load(fh)
-    except (FileNotFoundError, json.JSONDecodeError) as exc:
+        t0 = time.monotonic()
+        try:
+            proc = subprocess.run(
+                [
+                    "pytest", "tests/", "-v",
+                    "--tb=short",
+                    "--json-report",
+                    f"--json-report-file={report_path}",
+                ],
+                capture_output=True,
+                text=True,
+                cwd="/app",
+                timeout=_PYTEST_TIMEOUT_SECONDS,
+            )
+        except subprocess.TimeoutExpired as exc:
+            elapsed = round(time.monotonic() - t0, 2)
+            return {
+                "tests": [],
+                "summary": {"total": 0, "passed": 0, "failed": 0, "error": 1, "duration": elapsed},
+                "ran_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "run_error": (
+                    f"Pytest viršijo laiko limitą ({_PYTEST_TIMEOUT_SECONDS}s). "
+                    "Galimai užstrigęs testas."
+                ),
+                "stderr": (exc.stderr or "")[:2000] if exc.stderr else "",
+            }
+
+        elapsed = round(time.monotonic() - t0, 2)
+
+        try:
+            with open(report_path, encoding="utf-8") as fh:
+                report = json.load(fh)
+        except (FileNotFoundError, json.JSONDecodeError) as exc:
+            return {
+                "tests": [],
+                "summary": {"total": 0, "passed": 0, "failed": 0, "error": 1, "duration": elapsed},
+                "ran_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
+                "run_error": str(exc),
+                "stderr": proc.stderr[:2000] if proc.stderr else "",
+            }
+
+        tests: list[dict[str, Any]] = []
+        for test in report.get("tests", []):
+            node_id: str = test.get("nodeid", "")
+            # "tests/test_routes.py::TestHealthRoute::test_returns_200"
+            # → "test_routes → TestHealthRoute → test_returns_200"
+            name = node_id.replace("tests/", "").replace("::", " → ")
+            call_info = test.get("call") or {}
+            tests.append({
+                "name": name,
+                "outcome": test.get("outcome", "unknown"),
+                "duration": round(call_info.get("duration", 0), 4),
+            })
+
+        raw = report.get("summary", {})
         return {
-            "tests": [],
-            "summary": {"total": 0, "passed": 0, "failed": 0, "error": 1, "duration": elapsed},
+            "tests": tests,
+            "summary": {
+                "total": raw.get("total", len(tests)),
+                "passed": raw.get("passed", 0),
+                "failed": raw.get("failed", 0),
+                "error": raw.get("error", 0),
+                "duration": elapsed,
+            },
             "ran_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-            "run_error": str(exc),
-            "stderr": proc.stderr[:2000] if proc.stderr else "",
         }
-
-    tests: list[dict[str, Any]] = []
-    for test in report.get("tests", []):
-        node_id: str = test.get("nodeid", "")
-        # "tests/test_routes.py::TestHealthRoute::test_returns_200"
-        # → "test_routes → TestHealthRoute → test_returns_200"
-        name = node_id.replace("tests/", "").replace("::", " → ")
-        call_info = test.get("call") or {}
-        tests.append({
-            "name": name,
-            "outcome": test.get("outcome", "unknown"),
-            "duration": round(call_info.get("duration", 0), 4),
-        })
-
-    raw = report.get("summary", {})
-    return {
-        "tests": tests,
-        "summary": {
-            "total": raw.get("total", len(tests)),
-            "passed": raw.get("passed", 0),
-            "failed": raw.get("failed", 0),
-            "error": raw.get("error", 0),
-            "duration": elapsed,
-        },
-        "ran_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime()),
-    }
+    finally:
+        try:
+            os.remove(report_path)
+        except OSError:
+            pass
 
 
 @router.get("/run")
 async def run_tests() -> JSONResponse:
-    """Paleidžia visus pytest testus ir grąžina rezultatus."""
+    """
+    Paleidžia visus pytest testus ir grąžina rezultatus.
+    Lygiagrečių paleidimų neleidžiame — vienu metu vyksta tik vienas testavimas.
+    """
+    if _qa_lock.locked():
+        return JSONResponse(
+            status_code=429,
+            content={"detail": "Testavimas jau vyksta — palaukite kol baigsis"},
+        )
+
     global _last_results
-    _last_results = await asyncio.to_thread(_blocking_pytest_run)
+    async with _qa_lock:
+        _last_results = await asyncio.to_thread(_blocking_pytest_run)
     return JSONResponse(content=_last_results)
 
 
