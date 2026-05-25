@@ -73,6 +73,7 @@ app.include_router(auth.router)
 app.include_router(traffic.router)
 app.include_router(alerts.router)
 app.include_router(health.router)
+app.include_router(qa.router)
 
 # Statiniai failai
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
