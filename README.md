@@ -54,29 +54,43 @@ Kursinis darbas mažoms organizacijoms skirta centralizuota log analizės ir ano
 
 ## Paleidimas
 
-### 1. Bazinis stackas (be testinių logų)
+### 1. Aplinkos kintamieji
+
+```bash
+cp .env.example .env
+# Pakeiskite GF_SECURITY_ADMIN_PASSWORD reikšmę
+```
+
+### 2. Bazinis stackas (be testinių logų)
 
 ```bash
 docker compose up -d
 ```
 
-### 2. Su testinių logų generatoriumi (kursiniam/demo)
+### 3. Su testinių logų generatoriumi
 
 ```bash
 docker compose --profile dev up -d
 ```
 
-### 3. Su demo duomenimis (alertai dashboard'e)
+### 4. Su anomalijų aptikimu
 
 ```bash
-./seed_demo.sh
+docker compose --profile anomaly up -d
 ```
 
-### 4. Tikrinimas
+### 5. Viskas kartu (demo režimas)
+
+```bash
+docker compose --profile dev --profile anomaly up -d
+./seed_demo.sh   # įkelia demo alertus į dashboard'ą
+```
+
+### 6. Tikrinimas
 
 - **Dashboard**: http://localhost:8080 (admin / admin123)
-- **Grafana**: http://localhost:3000 (admin / $GF_SECURITY_ADMIN_PASSWORD)
-- **Loki API**: http://localhost:3100/ready
+- **Grafana**: http://localhost:3000 (admin / `$GF_SECURITY_ADMIN_PASSWORD`)
+- **Loki API**: http://localhost:3100/ready (tik vidinis)
 
 ## Anomalijų aptikimo metodai
 
@@ -127,14 +141,27 @@ Papildoma žiniatinklio sąsaja šalia Grafana, pasiekiama per `http://localhost
 - **Technologijos**: FastAPI + Uvicorn (backend), Vanilla JS + Tailwind CSS + Chart.js (frontend)
 - **Kalba**: Lietuvių / Anglų (perjungiama UI)
 - **Prisijungimas**: admin / admin123
+- **Autentifikacija**: Bearer token (sha256 hash) — taikomas visiems `/api/{traffic,alerts,health}` maršrutams
 - **Funkcijos**: logų srauto stebėjimas, anomalijų peržiūra, įrenginių sąrašas, paieška, sistemos būklė
+
+## Testavimas
+
+```bash
+# Dashboard testai (30 testų: alert_reader, routes, auth)
+docker compose run --rm dashboard pytest tests/ -v
+
+# Anomaly detector testai (rule, statistical, ML feature extraction)
+docker compose run --rm anomaly-detector pytest tests/ -v
+```
 
 ## Failų struktūra
 
 ```
 .
 ├── docker-compose.yml               # Pagrindinis Docker Compose
-├── .env                             # Aplinkos kintamieji
+├── .env / .env.example              # Aplinkos kintamieji (.env gitignored)
+├── docs/
+│   └── ARCHITECTURE.md              # Architektūros aprašymas
 ├── config/
 │   ├── syslog-ng/syslog-ng.conf    # Syslog-ng konfigūracija
 │   ├── loki/loki.yml               # Loki konfigūracija
@@ -148,23 +175,26 @@ Papildoma žiniatinklio sąsaja šalia Grafana, pasiekiama per `http://localhost
 ├── anomaly-detector/
 │   ├── Dockerfile
 │   ├── requirements.txt
-│   └── detector.py                  # Anomalijų aptikimo modulis
+│   ├── detector.py                  # Anomalijų aptikimo modulis (3 sluoksniai)
+│   └── tests/                       # Rule / Statistical / ML testai
 ├── dashboard/
 │   ├── Dockerfile
 │   ├── requirements.txt
 │   ├── app/
 │   │   ├── main.py                  # FastAPI aplikacija
-│   │   ├── routers/                 # API maršrutai (auth, traffic, alerts, health)
-│   │   ├── services/                # Loki klientas, alertų skaitytuvas, health checker
+│   │   ├── dependencies.py          # DI + require_auth
+│   │   ├── routers/                 # auth, traffic, alerts, health
+│   │   ├── services/                # loki_client, alert_reader, health_checker
 │   │   ├── models/schemas.py        # Pydantic modeliai
-│   │   └── static/                  # HTML, CSS, JS
-│   └── tests/                       # Pytest testai
+│   │   └── static/                  # index.html, login.html, css/, js/, fonts/
+│   └── tests/                       # Pytest testai (route + auth + alert_reader)
 ├── demo_data/
 │   └── anomaly_history.json         # Demo alertų duomenys
 ├── log-generator/
 │   ├── Dockerfile
 │   └── generator.py                 # Testinių logų generatorius
 ├── seed_demo.sh                     # Demo duomenų įkėlimo skriptas
+├── CLAUDE.md                        # Agent kontekstas
 └── README.md
 ```
 

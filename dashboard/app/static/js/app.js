@@ -332,7 +332,15 @@ function setPlaceholder(id, val) {
 }
 
 async function fetchJSON(url) {
-  const r = await fetch(url);
+  const token = sessionStorage.getItem("auth_token");
+  const headers = token ? { Authorization: `Bearer ${token}` } : {};
+  const r = await fetch(url, { headers });
+  if (r.status === 401) {
+    sessionStorage.removeItem("auth_token");
+    sessionStorage.removeItem("auth_user");
+    window.location.replace("/login");
+    throw new Error("HTTP 401");
+  }
   if (!r.ok) throw new Error(`HTTP ${r.status}`);
   return r.json();
 }
@@ -427,8 +435,10 @@ async function loadTrafficHistory() {
 
 function errorCount() {
   if (!state.current) return 0;
+  // Promtail iš syslog-ng išgauna tik standartines syslog severity etiketes:
+  // emerg, alert, crit, err, warning, notice, info, debug. Skaičiuojame klaidų lygius.
   const s = state.current.by_severity || {};
-  return (s.err || 0) + (s.error || 0) + (s.crit || 0) + (s.critical || 0);
+  return (s.emerg || 0) + (s.alert || 0) + (s.crit || 0) + (s.err || 0);
 }
 
 function logRate() {
@@ -641,15 +651,35 @@ function renderPulseBars() {
     return;
   }
 
+  // Suskaičiuojame realius alertus per kiekvieną valandinį laiko bucket'ą
+  // — bar'ai dažomi raudonai tik kai tikrai buvo aptiktas alertas.
+  const bucketStart = pts.map(p => new Date(p.time).getTime());
+  const bucketEnd = bucketStart.map((s, i) =>
+    i + 1 < bucketStart.length ? bucketStart[i + 1] : s + 60 * 60 * 1000
+  );
+  const alertCounts = bucketStart.map(() => 0);
+  for (const a of state.alerts) {
+    const ts = new Date(a.timestamp).getTime();
+    if (!Number.isFinite(ts)) continue;
+    for (let i = 0; i < bucketStart.length; i++) {
+      if (ts >= bucketStart[i] && ts < bucketEnd[i]) {
+        alertCounts[i]++;
+        break;
+      }
+    }
+  }
+
   const peak = Math.max(...pts.map(p => p.count), 1);
-  pts.forEach(p => {
+  pts.forEach((p, i) => {
     const pct = Math.max(4, Math.round(p.count / peak * 100));
-    const isAnomaly = p.count > peak * 0.7;
+    const isAnomaly = alertCounts[i] > 0;
     const bar = document.createElement("div");
     bar.className = "flex-1 rounded-t-sm transition-all cursor-default " +
       (isAnomaly ? "bg-error-container/80 hover:bg-error" : "bg-secondary-container/60 hover:bg-secondary");
     bar.style.height = pct + "%";
-    bar.title = p.count + " logs";
+    bar.title = isAnomaly
+      ? `${p.count} logs, ${alertCounts[i]} alert(s)`
+      : `${p.count} logs`;
     barsEl.appendChild(bar);
   });
 
@@ -762,6 +792,19 @@ function filteredDevices() {
   return q ? state.devices.filter(d => d.id.toLowerCase().includes(q)) : state.devices;
 }
 
+// Lietuviška daiktavardžių linksniavimas pagal kiekį.
+// 1, 21, 31, ... → "rezultatas" (vienaskaita)
+// 0, 10-19, 20, ... → "rezultatų" (kilmininkas)
+// 2-9, 22-29, ... → "rezultatai" (daugiskaita)
+function ltResultsWord(n) {
+  const last2 = n % 100;
+  const last = n % 10;
+  if (last2 >= 11 && last2 <= 19) return "rezultatų";
+  if (last === 1) return "rezultatas";
+  if (last >= 2 && last <= 9) return "rezultatai";
+  return "rezultatų";
+}
+
 function updateSearchUI() {
   const clearBtn  = el("search-clear");
   const countEl   = el("search-count");
@@ -780,7 +823,9 @@ function updateSearchUI() {
   else if (state.page === "devices") count = filteredDevices().length;
   else count = filteredAlerts().length;
 
-  countEl.textContent = `${count} rezultat${count === 1 ? "as" : "ų"}`;
+  countEl.textContent = state.lang === "lt"
+    ? `${count} ${ltResultsWord(count)}`
+    : `${count} result${count === 1 ? "" : "s"}`;
   countEl.classList.remove("hidden");
 }
 
@@ -1201,11 +1246,25 @@ async function init() {
     loadDevices(),
     loadQADefects(),
   ]);
-  setInterval(loadHealth,          30_000);
-  setInterval(loadTrafficCurrent,  30_000);
-  setInterval(loadTrafficHistory,  60_000);
-  setInterval(loadAlerts,          15_000);
-  setInterval(loadDevices,         60_000);
+
+  // Praleidžiame pollinimą kai tabas paslėptas — taupome resursus.
+  const whenVisible = fn => () => {
+    if (document.visibilityState === "visible") fn();
+  };
+  setInterval(whenVisible(loadHealth),          30_000);
+  setInterval(whenVisible(loadTrafficCurrent),  30_000);
+  setInterval(whenVisible(loadTrafficHistory),  60_000);
+  setInterval(whenVisible(loadAlerts),          15_000);
+  setInterval(whenVisible(loadDevices),         60_000);
+
+  // Grįžus į tabą — iš karto atnaujiname duomenis.
+  document.addEventListener("visibilitychange", () => {
+    if (document.visibilityState === "visible") {
+      loadHealth();
+      loadTrafficCurrent();
+      loadAlerts();
+    }
+  });
 }
 
 document.addEventListener("DOMContentLoaded", init);

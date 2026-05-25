@@ -2,12 +2,8 @@
 AlertReader ir vertimų žodyno testai.
 """
 import json
-import os
-import tempfile
 
-import pytest
-
-from app.services.alert_reader import AlertReader, _translate, _TRANSLATIONS
+from app.services.alert_reader import _translate, _TRANSLATIONS
 
 
 class TestTranslations:
