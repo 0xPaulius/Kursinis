@@ -3,6 +3,7 @@
 """
 from __future__ import annotations
 
+import asyncio
 import datetime
 from typing import Annotated
 
@@ -10,9 +11,9 @@ from fastapi import APIRouter, Depends, Query
 
 from app.models.schemas import TrafficCurrent, TrafficHistory, TrafficPoint
 from app.services.loki_client import AsyncLokiClient
-from app.dependencies import get_loki
+from app.dependencies import get_loki, require_auth
 
-router = APIRouter(prefix="/api/traffic", tags=["traffic"])
+router = APIRouter(prefix="/api/traffic", tags=["traffic"], dependencies=[Depends(require_auth)])
 
 
 @router.get("/current", response_model=TrafficCurrent)
@@ -59,7 +60,7 @@ async def get_traffic_history(
     start = now - datetime.timedelta(hours=hours)
 
     results = await loki.query_metric(
-        f'count_over_time({{job="syslog"}}[1h])',
+        f'sum(count_over_time({{job="syslog"}}[1h]))',
         start=start,
         end=now,
         step="1h",
@@ -68,28 +69,34 @@ async def get_traffic_history(
     points: list[TrafficPoint] = []
 
     if results:
-        # Metric query grąžina matrix — imame pirmą stream'ą
+        # Metric query grąžina matrix [{metric: {...}, values: [[ts_sec_float, val_str], ...]}].
+        # Naudojame `sum(...)` LogQL apvalkalą — grįžta tik vienas stream'as su jau sudėtais šeimininkais.
+        # Loki visada grąžina sekundes float formatu, todėl nebereikia ns/sec konversijos.
+        bucket: dict[str, int] = {}
         for stream in results:
-            for ts_str, val_str in stream.get("values", []):
+            for ts_val, val_str in stream.get("values", []):
                 try:
-                    ts_sec = int(ts_str) / 1e9 if int(ts_str) > 1e12 else int(ts_str)
+                    ts_sec = float(ts_val)
                     dt = datetime.datetime.fromtimestamp(ts_sec, tz=datetime.timezone.utc)
-                    points.append(TrafficPoint(
-                        time=dt.isoformat(),
-                        count=int(float(val_str)),
-                    ))
+                    iso = dt.isoformat()
+                    bucket[iso] = bucket.get(iso, 0) + int(float(val_str))
                 except (ValueError, TypeError):
                     continue
+        points = [TrafficPoint(time=t, count=c) for t, c in bucket.items()]
     else:
-        # Fallback: rankiniu būdu skaitome po valandą (max 24h — vengiame šimtų užklausų)
-        for h in range(min(hours, 24), 0, -1):
-            h_start = now - datetime.timedelta(hours=h)
-            h_end = now - datetime.timedelta(hours=h - 1)
-            lines = await loki.query_range('{job="syslog"}', start=h_start, end=h_end)
-            points.append(TrafficPoint(
-                time=h_start.isoformat(),
-                count=len(lines),
-            ))
+        # Fallback: lygiagrečios užklausos po valandą (max 24h — vengiame šimtų užklausų).
+        capped = min(hours, 24)
+        windows = [
+            (now - datetime.timedelta(hours=h), now - datetime.timedelta(hours=h - 1))
+            for h in range(capped, 0, -1)
+        ]
+        responses = await asyncio.gather(
+            *(loki.query_range('{job="syslog"}', start=s, end=e) for s, e in windows),
+            return_exceptions=True,
+        )
+        for (h_start, _), lines in zip(windows, responses):
+            count = len(lines) if isinstance(lines, list) else 0
+            points.append(TrafficPoint(time=h_start.isoformat(), count=count))
 
     points.sort(key=lambda p: p.time)
     return TrafficHistory(points=points)

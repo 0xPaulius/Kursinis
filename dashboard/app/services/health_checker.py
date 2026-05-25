@@ -42,7 +42,7 @@ class HealthChecker:
         if self._in_flight and not self._in_flight.done():
             return await self._in_flight
 
-        self._in_flight = asyncio.get_event_loop().create_task(self._fetch())
+        self._in_flight = asyncio.create_task(self._fetch())
         result = await self._in_flight
         self._cached = result
         self._cached_at = time.monotonic()
@@ -61,7 +61,12 @@ class HealthChecker:
         ))
 
         # --- syslog-ng + Promtail: per duomenų šviežumą ---
-        syslog_status, syslog_msg = await self._check_data_freshness()
+        # Jei Loki neveikia, negalime nieko spręsti apie šaltinius — žymime kaip nežinoma.
+        if loki_ready:
+            syslog_status, syslog_msg = await self._check_data_freshness()
+        else:
+            syslog_status = "unknown"
+            syslog_msg = "Negalima patikrinti (Loki nepasiekiamas)"
         services.append(ServiceHealth(
             name="syslog-ng",
             label="Žurnalų rinkimas (syslog-ng)",

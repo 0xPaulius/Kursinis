@@ -19,6 +19,7 @@ from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
 from app.routers import traffic, alerts, health, auth
+from app.services.alert_reader import AlertReader
 from app.services.loki_client import AsyncLokiClient
 from app.services.health_checker import HealthChecker
 
@@ -40,6 +41,7 @@ async def lifespan(app: FastAPI):
         loki = AsyncLokiClient(base_url=LOKI_URL, client=client)
         app.state.loki = loki
         app.state.health_checker = HealthChecker(loki=loki)
+        app.state.alert_reader = AlertReader()
         logger.info("Dashboard paleistas. Loki URL: %s", LOKI_URL)
         yield
     logger.info("Dashboard sustabdytas.")
@@ -54,11 +56,16 @@ app = FastAPI(
     redoc_url=None,
 )
 
+# CORS: dashboard ir API serveriai sutampa (same-origin), tad CORS realiai nereikalingas.
+# Paliekame siaurą sąrašą tik vietiniam dev naudojimui (8080, 127.0.0.1).
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["GET"],
-    allow_headers=["*"],
+    allow_origins=[
+        "http://localhost:8080",
+        "http://127.0.0.1:8080",
+    ],
+    allow_methods=["GET", "POST"],
+    allow_headers=["Authorization", "Content-Type"],
 )
 
 # API maršrutai
