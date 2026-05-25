@@ -18,7 +18,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.routers import traffic, alerts, health, auth
+from app.routers import traffic, alerts, health, auth, qa
 from app.services.alert_reader import AlertReader
 from app.services.loki_client import AsyncLokiClient
 from app.services.health_checker import HealthChecker
