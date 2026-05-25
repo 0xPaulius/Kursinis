@@ -61,7 +61,12 @@ class HealthChecker:
         ))
 
         # --- syslog-ng + Promtail: per duomenų šviežumą ---
-        syslog_status, syslog_msg = await self._check_data_freshness()
+        # Jei Loki neveikia, negalime nieko spręsti apie šaltinius — žymime kaip nežinoma.
+        if loki_ready:
+            syslog_status, syslog_msg = await self._check_data_freshness()
+        else:
+            syslog_status = "unknown"
+            syslog_msg = "Negalima patikrinti (Loki nepasiekiamas)"
         services.append(ServiceHealth(
             name="syslog-ng",
             label="Žurnalų rinkimas (syslog-ng)",

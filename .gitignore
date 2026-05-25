@@ -1,29 +1,11 @@
-LaTex/
-
-# Python bytecode and caches
 __pycache__/
-*.py[cod]
+*.pyc
 *.pyo
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-
-# Virtual environments
+.env
+*.log
 .venv/
 venv/
-env/
-
-# Editor and OS noise
-*.swp
-*.swo
-*~
-.DS_Store
-Thumbs.db
-
-# Local logs and runtime files
-*.log
-
-# Coursework/export artifacts (kept outside git)
-*.docx
-*.pdf
-*.zip
+*.egg-info/
+.pytest_cache/
+LaTex/
+.claude/
