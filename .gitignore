@@ -9,3 +9,5 @@ venv/
 .pytest_cache/
 LaTex/
 .claude/
+.lo-profile/
+scripts/
