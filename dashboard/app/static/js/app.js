@@ -95,7 +95,7 @@ const I18N = {
     qa_passed:          "Praėjo",
     qa_failed:          "Nepraėjo",
     qa_duration:        "Trukmė, s",
-    qa_no_results:      "Paspauskite „Vykdyti testus"",
+    qa_no_results:      "Paspauskite „Vykdyti testus“",
     qa_test_results:    "Testų rezultatai",
     qa_test_name:       "Testo pavadinimas",
     qa_test_status:     "Būklė",
