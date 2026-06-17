@@ -149,13 +149,25 @@ services:
     environment:
       - LOKI_URL=http://loki:3100
       - ANOMALY_DB_PATH=/data/anomaly_history.json
+      - DEVICES_DB_PATH=/state/devices.json
+      - SYSLOG_HOST=syslog-ng       # Demonstracinio srauto siuntimas į kolektorių
+      - SYSLOG_PORT=514
+      - HOST_INFO_DIR=/host         # Savo serverio (host) info skaitymui
     volumes:
       - anomaly-data:/data:ro
+      - dashboard-state:/state      # Registruoti įrenginiai (rašoma)
+      # Savo serverio branduolio/OS versija įrenginių žemėlapiui (tik Linux host).
+      # Jei šių kelių nėra (ne-Linux host), užkomentuokite — žemėlapis veiks be jų.
+      - /etc/hostname:/host/hostname:ro
+      - /etc/os-release:/host/os-release:ro
+      - /proc/version:/host/version:ro
     networks:
       - lognet
     depends_on:
       loki:
         condition: service_healthy
+      syslog-ng:
+        condition: service_started
 
   # ============================================================
   # 7. LOG GENERATOR - Testinių logų generatorius (DEV ONLY)
@@ -193,6 +205,8 @@ volumes:
   syslog-ng-logs:
     driver: local
   anomaly-data:
+    driver: local
+  dashboard-state:
     driver: local
   promtail-positions:
     driver: local

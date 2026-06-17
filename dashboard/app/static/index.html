@@ -106,10 +106,6 @@ tailwind.config = {
       <span class="material-symbols-outlined nav-icon text-xl">notifications_active</span>
       <span id="nav-label-messages" class="text-sm font-label">Pranešimai</span>
     </button>
-    <button class="nav-btn" id="nav-qa" onclick="navigate('qa')">
-      <span class="material-symbols-outlined nav-icon text-xl">science</span>
-      <span id="nav-label-qa" class="text-sm font-label">Kokybė</span>
-    </button>
   </nav>
 
   <div class="mt-auto px-2">
@@ -254,14 +250,35 @@ tailwind.config = {
             <h3 id="network-activity-title" class="font-headline text-lg font-bold">Tinklo aktyvumas</h3>
             <p id="last-24h-label" class="text-[10px] text-on-surface-variant font-label uppercase">Paskutinės 24 valandos</p>
           </div>
-          <span class="flex items-center gap-1 text-[10px] font-bold font-label uppercase">
-            <span class="w-2 h-2 rounded-full bg-black"></span>
-            <span id="incoming-label">Įeinantis</span>
-          </span>
+          <select id="traffic-device-select" onchange="onTrafficDeviceChange()"
+            class="text-xs font-label bg-surface-container-low border border-outline-variant/40 rounded-lg px-3 py-1.5 outline-none focus:border-black max-w-[200px] truncate">
+            <option value="">Visi įrenginiai</option>
+          </select>
         </div>
         <div class="chart-wrap">
           <canvas id="traffic-chart"></canvas>
         </div>
+
+        <!-- Pasirinkto įrenginio statistika (rodoma tik pasirinkus) -->
+        <div id="traffic-device-stats" class="hidden mt-4 pt-4 border-t border-surface-container grid grid-cols-4 gap-3 text-center">
+          <div>
+            <div id="tds-status-label" class="text-[10px] text-on-surface-variant font-label uppercase">Būsena</div>
+            <div id="tds-status" class="font-headline font-bold text-sm">—</div>
+          </div>
+          <div>
+            <div id="tds-logs5m-label" class="text-[10px] text-on-surface-variant font-label uppercase">Logai (5 min)</div>
+            <div id="tds-logs5m" class="font-headline font-bold text-sm">—</div>
+          </div>
+          <div>
+            <div id="tds-lastseen-label" class="text-[10px] text-on-surface-variant font-label uppercase">Paskutinis logas</div>
+            <div id="tds-lastseen" class="font-headline font-bold text-sm">—</div>
+          </div>
+          <div>
+            <div id="tds-alerts-label" class="text-[10px] text-on-surface-variant font-label uppercase">Įspėjimai</div>
+            <div id="tds-alerts" class="font-headline font-bold text-sm">—</div>
+          </div>
+        </div>
+
         <div class="mt-4 pt-4 border-t border-surface-container flex items-center gap-6">
           <div>
             <div id="total-label" class="text-[10px] text-on-surface-variant font-label uppercase">Iš viso</div>
@@ -360,50 +377,85 @@ tailwind.config = {
   <!-- ======================== ĮRENGINIAI ======================== -->
   <section id="page-devices" class="page p-6 space-y-6">
 
-    <h2 id="devices-page-title" class="text-2xl font-extrabold font-headline">Įrenginiai</h2>
+    <div class="flex justify-between items-center gap-4 flex-wrap">
+      <h2 id="devices-page-title" class="text-2xl font-extrabold font-headline">Įrenginiai</h2>
+      <div class="flex items-center gap-3">
+        <button id="devices-demo-btn" onclick="runAttackDemo()"
+          class="flex items-center gap-2 px-5 py-2 bg-error text-on-error rounded-xl text-sm font-bold hover:opacity-90 transition disabled:opacity-50">
+          <span class="material-symbols-outlined text-base">bug_report</span>
+          <span id="devices-demo-btn-label">Paleisti demonstraciją</span>
+        </button>
+        <button id="devices-add-btn" onclick="openAddDeviceModal()"
+          class="flex items-center gap-2 px-5 py-2 bg-black text-white rounded-xl text-sm font-bold hover:bg-slate-800 transition">
+          <span class="material-symbols-outlined text-base">add</span>
+          <span id="devices-add-btn-label">Pridėti įrenginį</span>
+        </button>
+      </div>
+    </div>
+
+    <!-- Demonstracijos būsena -->
+    <div id="devices-demo-status" class="hidden bg-primary-container text-on-primary-container rounded-xl px-5 py-3 text-sm font-label flex items-center gap-2">
+      <span class="material-symbols-outlined text-base">info</span>
+      <span id="devices-demo-status-text"></span>
+    </div>
 
     <!-- Suvestinė -->
     <div class="grid grid-cols-3 gap-6">
       <div class="bg-surface-container-lowest rounded-xl p-6 shadow-sm">
         <div class="p-2 bg-surface-container-low rounded-lg w-fit mb-4">
-          <span class="material-symbols-outlined text-black text-xl">router</span>
+          <span class="material-symbols-outlined text-black text-xl">lan</span>
         </div>
         <h3 id="devices-total-label" class="font-headline text-slate-500 font-semibold text-xs mb-1 uppercase tracking-wider">Iš viso įrenginių</h3>
         <span id="devices-total" class="font-headline text-3xl font-bold">—</span>
       </div>
       <div class="bg-surface-container-lowest rounded-xl p-6 shadow-sm">
-        <div class="p-2 bg-error-container rounded-lg w-fit mb-4">
-          <span class="material-symbols-outlined text-on-error-container text-xl">gpp_bad</span>
+        <div class="p-2 bg-secondary-container rounded-lg w-fit mb-4">
+          <span class="material-symbols-outlined text-on-secondary-container text-xl">wifi</span>
         </div>
-        <h3 id="devices-critical-label" class="font-headline text-slate-500 font-semibold text-xs mb-1 uppercase tracking-wider">Kritiniai</h3>
-        <span id="devices-critical" class="font-headline text-3xl font-bold text-error">—</span>
+        <h3 id="devices-online-label" class="font-headline text-slate-500 font-semibold text-xs mb-1 uppercase tracking-wider">Aktyvūs dabar</h3>
+        <span id="devices-online" class="font-headline text-3xl font-bold text-secondary">—</span>
       </div>
       <div class="bg-surface-container-lowest rounded-xl p-6 shadow-sm">
-        <div class="p-2 bg-tertiary-fixed rounded-lg w-fit mb-4">
-          <span class="material-symbols-outlined text-on-tertiary-container text-xl">warning</span>
+        <div class="p-2 bg-surface-container-low rounded-lg w-fit mb-4">
+          <span class="material-symbols-outlined text-black text-xl">article</span>
         </div>
-        <h3 id="devices-warning-label" class="font-headline text-slate-500 font-semibold text-xs mb-1 uppercase tracking-wider">Įspėjimai</h3>
-        <span id="devices-warning" class="font-headline text-3xl font-bold">—</span>
+        <h3 id="devices-logs5m-label" class="font-headline text-slate-500 font-semibold text-xs mb-1 uppercase tracking-wider">Logai (5 min)</h3>
+        <span id="devices-logs5m" class="font-headline text-3xl font-bold">—</span>
       </div>
+    </div>
+
+    <!-- Įrenginių žemėlapis -->
+    <div class="bg-surface-container-lowest rounded-xl p-6 shadow-sm">
+      <div class="flex justify-between items-center mb-4 flex-wrap gap-2">
+        <h3 id="map-title" class="font-headline text-lg font-bold">Įrenginių žemėlapis</h3>
+        <div class="flex items-center gap-4 text-[11px] font-label">
+          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-secondary"></span><span id="map-legend-online">Aktyvus</span></span>
+          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-outline"></span><span id="map-legend-offline">Neaktyvus</span></span>
+          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-error"></span><span id="map-legend-alert">Su įspėjimais</span></span>
+        </div>
+      </div>
+      <div id="device-map" class="w-full overflow-x-auto min-h-[320px] flex items-center justify-center">
+        <div class="skeleton h-64 w-full rounded-xl"></div>
+      </div>
+      <p id="device-map-empty" class="hidden text-center text-on-surface-variant text-sm font-label py-10">Įrenginių dar nėra.</p>
     </div>
 
     <!-- Lentelė -->
-    <div id="devices-empty" class="hidden bg-surface-container-lowest rounded-xl p-12 text-center shadow-sm">
-      <span class="material-symbols-outlined text-5xl text-on-surface-variant block mb-3">router</span>
-      <p id="devices-empty-label" class="text-on-surface-variant text-sm font-label">Įrenginių nerasta</p>
-    </div>
-
     <div id="devices-table-wrap" class="bg-surface-container-lowest rounded-xl overflow-hidden shadow-sm">
       <table class="w-full text-sm">
         <thead>
           <tr class="bg-surface-container-low border-b border-outline-variant/30">
+            <th id="th-name" class="text-left px-6 py-3 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant font-label">Pavadinimas</th>
+            <th id="th-os" class="text-left px-6 py-3 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant font-label">OS</th>
             <th id="th-ip" class="text-left px-6 py-3 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant font-label">IP / Hostname</th>
-            <th id="th-count" class="text-left px-6 py-3 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant font-label">Įspėjimai</th>
-            <th id="th-worst" class="text-left px-6 py-3 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant font-label">Blogiausia</th>
+            <th id="th-status" class="text-left px-6 py-3 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant font-label">Būsena</th>
+            <th id="th-logs" class="text-left px-6 py-3 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant font-label">Logai (5 min)</th>
+            <th id="th-lastseen" class="text-left px-6 py-3 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant font-label">Paskutinis logas</th>
+            <th id="th-actions" class="text-right px-6 py-3 text-[11px] font-bold uppercase tracking-wider text-on-surface-variant font-label">Veiksmai</th>
           </tr>
         </thead>
         <tbody id="devices-tbody">
-          <tr><td colspan="3" class="px-6 py-8 text-center text-on-surface-variant text-sm">
+          <tr><td colspan="7" class="px-6 py-8 text-center text-on-surface-variant text-sm">
             <div class="skeleton h-4 w-1/2 mx-auto mb-2"></div>
             <div class="skeleton h-4 w-1/3 mx-auto"></div>
           </td></tr>
@@ -427,60 +479,103 @@ tailwind.config = {
     </div>
   </section>
 
-  <!-- ======================== KOKYBĖ ======================== -->
-  <section id="page-qa" class="page p-6 space-y-6">
+</main>
 
-    <!-- Header -->
-    <div class="flex justify-between items-center">
-      <h2 id="qa-page-title" class="text-2xl font-extrabold font-headline">Kokybės užtikrinimas</h2>
-      <button id="qa-run-btn" onclick="runQATests()"
-        class="flex items-center gap-2 px-5 py-2 bg-black text-white rounded-xl text-sm font-bold hover:bg-slate-800 transition disabled:opacity-50">
-        <span class="material-symbols-outlined text-base">play_arrow</span>
-        <span id="qa-run-btn-label">Vykdyti testus</span>
-      </button>
+<!-- ======================== ĮRENGINIO MODALAS ======================== -->
+<div id="device-modal" class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onclick="onDeviceModalBackdrop(event)">
+  <div class="bg-surface-container-lowest rounded-2xl shadow-xl w-full max-w-lg overflow-hidden">
+
+    <!-- Forma -->
+    <div id="device-modal-form">
+      <div class="flex justify-between items-center px-6 py-4 border-b border-surface-container">
+        <h3 id="device-modal-title" class="font-headline text-lg font-bold">Pridėti naują įrenginį</h3>
+        <button onclick="closeDeviceModal()" class="text-on-surface-variant hover:text-on-surface transition">
+          <span class="material-symbols-outlined">close</span>
+        </button>
+      </div>
+      <div class="p-6 space-y-4">
+        <div>
+          <label id="dev-name-label" for="dev-name" class="block text-xs font-bold uppercase tracking-wider text-on-surface-variant font-label mb-1.5">Pavadinimas</label>
+          <input id="dev-name" type="text" autocomplete="off"
+            class="w-full px-4 py-2.5 bg-surface-container-low rounded-xl border border-outline-variant/40 focus:border-black focus:ring-0 text-sm outline-none">
+        </div>
+        <div>
+          <label id="dev-ip-label" for="dev-ip" class="block text-xs font-bold uppercase tracking-wider text-on-surface-variant font-label mb-1.5">IP adresas</label>
+          <input id="dev-ip" type="text" autocomplete="off" inputmode="decimal"
+            class="w-full px-4 py-2.5 bg-surface-container-low rounded-xl border border-outline-variant/40 focus:border-black focus:ring-0 text-sm outline-none font-mono">
+        </div>
+        <div>
+          <label id="dev-os-label" for="dev-os" class="block text-xs font-bold uppercase tracking-wider text-on-surface-variant font-label mb-1.5">Operacinė sistema</label>
+          <select id="dev-os"
+            class="w-full px-4 py-2.5 bg-surface-container-low rounded-xl border border-outline-variant/40 focus:border-black focus:ring-0 text-sm outline-none">
+            <option id="dev-os-macos" value="macos">macOS (MacBook)</option>
+            <option id="dev-os-windows" value="windows">Windows 11 (PC)</option>
+          </select>
+        </div>
+        <p id="dev-form-error" class="hidden text-error text-sm font-label"></p>
+      </div>
+      <div class="flex justify-end gap-3 px-6 py-4 border-t border-surface-container">
+        <button id="dev-cancel-btn" onclick="closeDeviceModal()"
+          class="px-4 py-2 rounded-xl text-sm font-bold text-on-surface-variant hover:bg-surface-container transition">Atšaukti</button>
+        <button id="dev-save-btn" onclick="submitAddDevice()"
+          class="px-5 py-2 bg-black text-white rounded-xl text-sm font-bold hover:bg-slate-800 transition disabled:opacity-50">Pridėti</button>
+      </div>
     </div>
 
-    <!-- Summary cards (hidden until first run) -->
-    <div id="qa-summary" class="hidden grid grid-cols-4 gap-4">
-      <div class="bg-surface-container-lowest rounded-xl p-5 shadow-sm text-center">
-        <div id="qa-total-val" class="font-headline text-3xl font-bold">—</div>
-        <div id="qa-total-label" class="text-xs font-label text-on-surface-variant uppercase tracking-wider mt-1">Iš viso</div>
+    <!-- Instrukcija (rodoma pridėjus) -->
+    <div id="device-modal-tutorial" class="hidden">
+      <div class="flex justify-between items-center px-6 py-4 border-b border-surface-container">
+        <h3 id="device-tut-title" class="font-headline text-lg font-bold flex items-center gap-2">
+          <span class="material-symbols-outlined text-secondary">check_circle</span>
+          <span id="device-tut-title-text">Įrenginys pridėtas</span>
+        </h3>
+        <button onclick="closeDeviceModal()" class="text-on-surface-variant hover:text-on-surface transition">
+          <span class="material-symbols-outlined">close</span>
+        </button>
       </div>
-      <div class="bg-surface-container-lowest rounded-xl p-5 shadow-sm text-center">
-        <div id="qa-passed-val" class="font-headline text-3xl font-bold text-secondary">—</div>
-        <div id="qa-passed-label" class="text-xs font-label text-on-surface-variant uppercase tracking-wider mt-1">Praėjo</div>
-      </div>
-      <div class="bg-surface-container-lowest rounded-xl p-5 shadow-sm text-center">
-        <div id="qa-failed-val" class="font-headline text-3xl font-bold text-error">—</div>
-        <div id="qa-failed-label" class="text-xs font-label text-on-surface-variant uppercase tracking-wider mt-1">Nepraėjo</div>
-      </div>
-      <div class="bg-surface-container-lowest rounded-xl p-5 shadow-sm text-center">
-        <div id="qa-duration-val" class="font-headline text-3xl font-bold">—</div>
-        <div id="qa-duration-label" class="text-xs font-label text-on-surface-variant uppercase tracking-wider mt-1">Trukmė, s</div>
-      </div>
-    </div>
-
-    <!-- Test results table -->
-    <div class="bg-surface-container-lowest rounded-xl shadow-sm overflow-hidden">
-      <div id="qa-table-wrap">
-        <div class="p-14 text-center text-on-surface-variant">
-          <span class="material-symbols-outlined text-5xl mb-4 block">science</span>
-          <p id="qa-no-results-label" class="text-sm font-label">Paspauskite „Vykdyti testus"</p>
+      <div class="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
+        <p id="device-tut-intro" class="text-sm text-on-surface-variant font-body leading-relaxed"></p>
+        <ol id="device-tut-steps" class="list-decimal list-inside space-y-2 text-sm font-body"></ol>
+        <div>
+          <div id="device-tut-code-label" class="text-[10px] font-bold uppercase tracking-wider text-on-surface-variant font-label mb-1.5">Greitas testas</div>
+          <pre id="device-tut-code" class="bg-primary-container text-on-primary-container text-xs font-mono p-3 rounded-xl overflow-x-auto whitespace-pre-wrap"></pre>
         </div>
       </div>
-    </div>
-
-    <!-- Known defects -->
-    <div>
-      <h3 id="qa-defects-title" class="text-lg font-bold font-headline mb-4">Žinomi defektai</h3>
-      <div id="qa-defects-list">
-        <div class="skeleton h-20 rounded-xl"></div>
+      <div class="flex justify-end px-6 py-4 border-t border-surface-container">
+        <button id="dev-done-btn" onclick="closeDeviceModal()"
+          class="px-5 py-2 bg-black text-white rounded-xl text-sm font-bold hover:bg-slate-800 transition">Supratau</button>
       </div>
     </div>
 
-  </section>
+  </div>
+</div>
 
-</main>
+<!-- ======================== ĮRENGINIO INFORMACIJOS MODALAS ======================== -->
+<div id="device-info-modal" class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-black/40 p-4" onclick="onDeviceInfoBackdrop(event)">
+  <div class="bg-surface-container-lowest rounded-2xl shadow-xl w-full max-w-md overflow-hidden">
+    <div class="flex justify-between items-center px-6 py-4 border-b border-surface-container">
+      <h3 class="font-headline text-lg font-bold flex items-center gap-2">
+        <span id="device-info-status-dot" class="w-2.5 h-2.5 rounded-full bg-outline"></span>
+        <span id="device-info-name">—</span>
+      </h3>
+      <button onclick="closeDeviceInfo()" class="text-on-surface-variant hover:text-on-surface transition">
+        <span class="material-symbols-outlined">close</span>
+      </button>
+    </div>
+    <dl class="p-6 space-y-3 text-sm">
+      <div class="flex justify-between gap-4"><dt id="info-status-label" class="text-on-surface-variant font-label">Būsena</dt><dd id="info-status" class="font-semibold text-right"></dd></div>
+      <div class="flex justify-between gap-4"><dt id="info-source-label" class="text-on-surface-variant font-label">Tipas</dt><dd id="info-source" class="font-semibold text-right"></dd></div>
+      <div class="flex justify-between gap-4"><dt id="info-ip-label" class="text-on-surface-variant font-label">IP adresas</dt><dd id="info-ip" class="font-mono text-right"></dd></div>
+      <div class="flex justify-between gap-4"><dt id="info-hostname-label" class="text-on-surface-variant font-label">Hostname</dt><dd id="info-hostname" class="font-mono text-right"></dd></div>
+      <div class="flex justify-between gap-4"><dt id="info-os-label" class="text-on-surface-variant font-label">Operacinė sistema</dt><dd id="info-os" class="text-right"></dd></div>
+      <div class="flex justify-between gap-4"><dt id="info-version-label" class="text-on-surface-variant font-label">Versija / branduolys</dt><dd id="info-version" class="text-right"></dd></div>
+      <div class="flex justify-between gap-4"><dt id="info-lastseen-label" class="text-on-surface-variant font-label">Paskutinis logas</dt><dd id="info-lastseen" class="text-right"></dd></div>
+      <div class="flex justify-between gap-4"><dt id="info-logs5m-label" class="text-on-surface-variant font-label">Logai (5 min)</dt><dd id="info-logs5m" class="font-semibold text-right"></dd></div>
+      <div class="flex justify-between gap-4"><dt id="info-logs1h-label" class="text-on-surface-variant font-label">Logai (1 val)</dt><dd id="info-logs1h" class="font-semibold text-right"></dd></div>
+      <div class="flex justify-between gap-4"><dt id="info-alerts-label" class="text-on-surface-variant font-label">Įspėjimai</dt><dd id="info-alerts" class="font-semibold text-right"></dd></div>
+    </dl>
+  </div>
+</div>
 
 <script src="/static/js/chart.min.js"></script>
 <script src="/static/js/app.js"></script>

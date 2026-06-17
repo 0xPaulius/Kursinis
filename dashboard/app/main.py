@@ -7,8 +7,11 @@ Kursinis darbas: Centralizuota žurnalų analizės ir anomalijų
 """
 from __future__ import annotations
 
+import asyncio
+import contextlib
 import logging
 import os
+import random
 from contextlib import asynccontextmanager
 from pathlib import Path
 
@@ -18,10 +21,14 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.routers import traffic, alerts, health, auth, qa
+from app.routers import traffic, alerts, health, auth, devices
 from app.services.alert_reader import AlertReader
+from app.services.device_monitor import DeviceMonitor
+from app.services.device_registry import DeviceRegistry
+from app.services.host_info import HostInfo
 from app.services.loki_client import AsyncLokiClient
 from app.services.health_checker import HealthChecker
+from app.services.syslog_emitter import SyslogEmitter
 
 logging.basicConfig(
     level=logging.INFO,
@@ -33,6 +40,23 @@ logger = logging.getLogger("dashboard")
 LOKI_URL = os.getenv("LOKI_URL", "http://loki:3100")
 STATIC_DIR = Path(__file__).parent / "static"
 
+# Fonis normalaus srauto generavimo intervalas (sekundėmis)
+NORMAL_TRAFFIC_INTERVAL = int(os.getenv("NORMAL_TRAFFIC_INTERVAL", "5"))
+
+
+async def _normal_traffic_loop(registry: DeviceRegistry, emitter: SyslogEmitter) -> None:
+    """Periodiškai siunčia normalų srautą už kiekvieną įjungtą įrenginį."""
+    while True:
+        await asyncio.sleep(NORMAL_TRAFFIC_INTERVAL)
+        try:
+            for device in registry.list_all():
+                # Tik sintetiniai (demonstraciniai) įrenginiai gauna generuotą srautą —
+                # realūs aptikti host'ai siunčia savo tikrus logus.
+                if device.get("enabled", True) and device.get("synthetic", True):
+                    emitter.emit_normal_for_device(device, count=random.randint(1, 3))
+        except Exception as exc:  # noqa: BLE001 — fonis ciklas neturi nukristi
+            logger.warning("Normalaus srauto generavimo klaida: %s", exc)
+
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
@@ -42,8 +66,26 @@ async def lifespan(app: FastAPI):
         app.state.loki = loki
         app.state.health_checker = HealthChecker(loki=loki)
         app.state.alert_reader = AlertReader()
+        app.state.device_registry = DeviceRegistry()
+        app.state.syslog_emitter = SyslogEmitter()
+        app.state.host_info = HostInfo()
+        app.state.device_monitor = DeviceMonitor(
+            loki=loki,
+            registry=app.state.device_registry,
+            alert_reader=app.state.alert_reader,
+            host_info=app.state.host_info,
+        )
+        traffic_task = asyncio.create_task(
+            _normal_traffic_loop(app.state.device_registry, app.state.syslog_emitter)
+        )
         logger.info("Dashboard paleistas. Loki URL: %s", LOKI_URL)
-        yield
+        try:
+            yield
+        finally:
+            traffic_task.cancel()
+            with contextlib.suppress(asyncio.CancelledError):
+                await traffic_task
+            app.state.syslog_emitter.close()
     logger.info("Dashboard sustabdytas.")
 
 
@@ -73,7 +115,7 @@ app.include_router(auth.router)
 app.include_router(traffic.router)
 app.include_router(alerts.router)
 app.include_router(health.router)
-app.include_router(qa.router)
+app.include_router(devices.router)
 
 # Statiniai failai
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
