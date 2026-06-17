@@ -147,9 +147,6 @@ Papildoma žiniatinklio sąsaja šalia Grafana, pasiekiama per `http://localhost
 ## Testavimas
 
 ```bash
-# Dashboard testai (30 testų: alert_reader, routes, auth)
-docker compose run --rm dashboard pytest tests/ -v
-
 # Anomaly detector testai (rule, statistical, ML feature extraction)
 docker compose run --rm anomaly-detector pytest tests/ -v
 ```
@@ -180,14 +177,13 @@ docker compose run --rm anomaly-detector pytest tests/ -v
 ├── dashboard/
 │   ├── Dockerfile
 │   ├── requirements.txt
-│   ├── app/
-│   │   ├── main.py                  # FastAPI aplikacija
-│   │   ├── dependencies.py          # DI + require_auth
-│   │   ├── routers/                 # auth, traffic, alerts, health
-│   │   ├── services/                # loki_client, alert_reader, health_checker
-│   │   ├── models/schemas.py        # Pydantic modeliai
-│   │   └── static/                  # index.html, login.html, css/, js/, fonts/
-│   └── tests/                       # Pytest testai (route + auth + alert_reader)
+│   └── app/
+│       ├── main.py                  # FastAPI aplikacija
+│       ├── dependencies.py          # DI + require_auth
+│       ├── routers/                 # auth, traffic, alerts, health, devices
+│       ├── services/                # loki_client, alert_reader, health_checker, device_registry, syslog_emitter
+│       ├── models/schemas.py        # Pydantic modeliai
+│       └── static/                  # index.html, login.html, css/, js/, fonts/
 ├── demo_data/
 │   └── anomaly_history.json         # Demo alertų duomenys
 ├── log-generator/

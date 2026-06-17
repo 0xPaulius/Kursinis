@@ -5,6 +5,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime
+import re
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
@@ -14,6 +15,9 @@ from app.services.loki_client import AsyncLokiClient
 from app.dependencies import get_loki, require_auth
 
 router = APIRouter(prefix="/api/traffic", tags=["traffic"], dependencies=[Depends(require_auth)])
+
+# Leistini host etiketės simboliai — apsauga nuo LogQL injekcijos per `host` parametrą.
+_HOST_RE = re.compile(r"^[A-Za-z0-9._-]{1,255}$")
 
 
 @router.get("/current", response_model=TrafficCurrent)
@@ -51,16 +55,23 @@ async def get_traffic_current(
 async def get_traffic_history(
     loki: Annotated[AsyncLokiClient, Depends(get_loki)],
     hours: Annotated[int, Query(ge=1, le=168)] = 24,
+    host: Annotated[str | None, Query(max_length=255)] = None,
 ) -> TrafficHistory:
     """
     Valandinis žurnalų skaičius per paskutines N valandų.
-    Naudojamas grafikui braižyti.
+    Naudojamas grafikui braižyti. Pateikus `host` parametrą, rodomas tik
+    nurodyto įrenginio (syslog `host` etiketės) srautas.
     """
     now = datetime.datetime.now(datetime.timezone.utc)
     start = now - datetime.timedelta(hours=hours)
 
+    # Jei nurodytas validus host — filtruojame pagal jį; kitaip imame visą srautą.
+    selector = '{job="syslog"}'
+    if host and _HOST_RE.match(host):
+        selector = f'{{job="syslog", host="{host}"}}'
+
     results = await loki.query_metric(
-        f'sum(count_over_time({{job="syslog"}}[1h]))',
+        f'sum(count_over_time({selector}[1h]))',
         start=start,
         end=now,
         step="1h",
@@ -91,7 +102,7 @@ async def get_traffic_history(
             for h in range(capped, 0, -1)
         ]
         responses = await asyncio.gather(
-            *(loki.query_range('{job="syslog"}', start=s, end=e) for s, e in windows),
+            *(loki.query_range(selector, start=s, end=e) for s, e in windows),
             return_exceptions=True,
         )
         for (h_start, _), lines in zip(windows, responses):

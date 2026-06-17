@@ -81,7 +81,6 @@ Be Grafana, sistema turi savą FastAPI dashboard'ą su lietuviška sąsaja.
    - Frontend: Vanilla JS + Tailwind + Chart.js
    - Auth: demo kredencialai admin / admin123, Bearer token Authorization antraštėje
    - Skaito Loki API gyvam srautui, `/data/anomaly_history.json` alertams
-   - Testai: `dashboard/tests/` (pytest)
 
 7. **log-generator** (DEV only — `--profile dev`)
    - Šaltinis: `log-generator/generator.py`
@@ -108,7 +107,6 @@ dashboard/
     models/schemas.py
     static/    — index.html, login.html, css/, js/, fonts/
   Dockerfile, requirements.txt
-  tests/                              — test_alert_reader, test_routes
 demo_data/anomaly_history.json
 seed_demo.sh
 log-generator/generator.py, Dockerfile
