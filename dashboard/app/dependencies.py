@@ -7,8 +7,11 @@ from fastapi import Header, HTTPException, Request
 
 from app.routers.auth import verify_demo_token
 from app.services.alert_reader import AlertReader
+from app.services.device_monitor import DeviceMonitor
+from app.services.device_registry import DeviceRegistry
 from app.services.loki_client import AsyncLokiClient
 from app.services.health_checker import HealthChecker
+from app.services.syslog_emitter import SyslogEmitter
 
 
 def get_loki(request: Request) -> AsyncLokiClient:
@@ -21,6 +24,22 @@ def get_health_checker(request: Request) -> HealthChecker:
 
 def get_alert_reader(request: Request) -> AlertReader:
     return request.app.state.alert_reader
+
+
+def get_device_registry(request: Request) -> DeviceRegistry:
+    return request.app.state.device_registry
+
+
+def get_syslog_emitter(request: Request) -> SyslogEmitter:
+    return request.app.state.syslog_emitter
+
+
+def get_device_monitor(request: Request) -> DeviceMonitor:
+    return request.app.state.device_monitor
+
+
+def get_notifier(request: Request):
+    return request.app.state.notifier
 
 
 def require_auth(authorization: str | None = Header(default=None)) -> None:

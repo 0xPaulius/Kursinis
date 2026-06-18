@@ -14,17 +14,17 @@
       "datasource": { "type": "loki", "uid": "loki" },
       "targets": [
         {
-          "expr": "sum(count_over_time({job=\"syslog\"} [1m]))",
+          "expr": "sum(count_over_time({job=\"syslog\", host=~\"$host\"} [1m]))",
           "legendFormat": "Visi logai",
           "refId": "A"
         },
         {
-          "expr": "sum(count_over_time({job=\"security\"} [1m]))",
+          "expr": "sum(count_over_time({job=\"security\", host=~\"$host\"} [1m]))",
           "legendFormat": "Saugumo logai",
           "refId": "B"
         },
         {
-          "expr": "sum(count_over_time({job=\"errors\"} [1m]))",
+          "expr": "sum(count_over_time({job=\"errors\", host=~\"$host\"} [1m]))",
           "legendFormat": "Klaidos",
           "refId": "C"
         }
@@ -59,7 +59,7 @@
       "datasource": { "type": "loki", "uid": "loki" },
       "targets": [
         {
-          "expr": "sum by (severity) (count_over_time({job=\"syslog\"} | severity != \"\" [$__range]))",
+          "expr": "sum by (severity) (count_over_time({job=\"syslog\", host=~\"$host\"} | severity != \"\" [$__range]))",
           "legendFormat": "{{severity}}",
           "refId": "A"
         }
@@ -104,7 +104,7 @@
       },
       "targets": [
         {
-          "expr": "topk(10, sum by (program) (count_over_time({job=\"syslog\"} | program != \"\" [$__range])))",
+          "expr": "topk(10, sum by (program) (count_over_time({job=\"syslog\", host=~\"$host\"} | program != \"\" [$__range])))",
           "legendFormat": "{{program}}",
           "refId": "A",
           "instant": true
@@ -119,7 +119,7 @@
       "datasource": { "type": "loki", "uid": "loki" },
       "targets": [
         {
-          "expr": "sum by (host) (count_over_time({job=\"syslog\"} |= \"Failed password\" [5m]))",
+          "expr": "sum by (host) (count_over_time({job=\"syslog\", host=~\"$host\"} |= \"Failed password\" [5m]))",
           "legendFormat": "{{host}}",
           "refId": "A"
         }
@@ -147,7 +147,7 @@
       "datasource": { "type": "loki", "uid": "loki" },
       "targets": [
         {
-          "expr": "sum(count_over_time({job=\"syslog\"} |~ \"DROP|REJECT\" [5m]))",
+          "expr": "sum(count_over_time({job=\"syslog\", host=~\"$host\"} |~ \"DROP|REJECT\" [5m]))",
           "legendFormat": "Blokuoti paketai",
           "refId": "A"
         }
@@ -167,7 +167,7 @@
       "datasource": { "type": "loki", "uid": "loki" },
       "targets": [
         {
-          "expr": "{job=\"security\"}",
+          "expr": "{job=\"security\", host=~\"$host\"}",
           "refId": "A"
         }
       ],
@@ -186,7 +186,28 @@
   "refresh": "10s",
   "schemaVersion": 39,
   "tags": ["syslog", "security", "anomaly"],
-  "templating": { "list": [] },
+  "templating": {
+    "list": [
+      {
+        "current": { "selected": false, "text": "All", "value": "$__all" },
+        "datasource": { "type": "loki", "uid": "loki" },
+        "definition": "label_values(host)",
+        "hide": 0,
+        "includeAll": true,
+        "allValue": ".+",
+        "label": "Įrenginys",
+        "multi": false,
+        "name": "host",
+        "options": [],
+        "query": { "label": "host", "refId": "LokiVariableQueryEditor-VariableQuery", "stream": "", "type": 1 },
+        "refresh": 2,
+        "regex": "",
+        "skipUrlSync": false,
+        "sort": 1,
+        "type": "query"
+      }
+    ]
+  },
   "time": { "from": "now-1h", "to": "now" },
   "timepicker": {},
   "timezone": "Europe/Vilnius",

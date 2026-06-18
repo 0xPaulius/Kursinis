@@ -50,6 +50,8 @@ SSH_BRUTE_THRESHOLD = int(os.getenv("SSH_BRUTE_THRESHOLD", "5"))
 LOG_SPIKE_MULTIPLIER = float(os.getenv("LOG_SPIKE_MULTIPLIER", "3.0"))
 ALERT_WEBHOOK_URL = os.getenv("ALERT_WEBHOOK_URL", "")
 ALERT_COOLDOWN_SECONDS = int(os.getenv("ALERT_COOLDOWN_SECONDS", "300"))
+# Kiek žalių log eilučių (įrodymų) saugoti prie kiekvieno alerto.
+SAMPLE_LINE_LIMIT = int(os.getenv("SAMPLE_LINE_LIMIT", "15"))
 ANOMALY_DB_PATH = "/data/anomaly_history.json"
 MODEL_PATH = "/data/model.pkl"
 TRAINING_DATA_PATH = "/data/training_data.pkl"
@@ -78,6 +80,7 @@ class Alert:
     source_host: str = ""
     source_ip: str = ""
     details: dict = field(default_factory=dict)
+    sample_lines: list = field(default_factory=list)  # žali log įrašai, sukėlę alertą
 
     def to_dict(self) -> dict:
         return {
@@ -89,6 +92,7 @@ class Alert:
             "source_host": self.source_host,
             "source_ip": self.source_ip,
             "details": self.details,
+            "sample_lines": self.sample_lines,
         }
 
 
@@ -200,6 +204,7 @@ class RuleBasedDetector:
         ip_pattern = re.compile(r"from\s+(\d+\.\d+\.\d+\.\d+)")
         ip_counts: Counter = Counter()
         ip_hosts: dict[str, set] = defaultdict(set)
+        ip_lines: dict[str, list[str]] = defaultdict(list)
 
         for entry in lines:
             match = ip_pattern.search(entry["line"])
@@ -208,6 +213,8 @@ class RuleBasedDetector:
                 ip_counts[ip] += 1
                 host = entry["labels"].get("host", "unknown")
                 ip_hosts[ip].add(host)
+                if len(ip_lines[ip]) < SAMPLE_LINE_LIMIT:
+                    ip_lines[ip].append(entry["line"])
 
         for ip, count in ip_counts.items():
             if count >= SSH_BRUTE_THRESHOLD:
@@ -229,6 +236,7 @@ class RuleBasedDetector:
                         "threshold": SSH_BRUTE_THRESHOLD,
                         "target_hosts": list(ip_hosts[ip]),
                     },
+                    sample_lines=ip_lines[ip],
                 ))
 
         return alerts
@@ -251,6 +259,7 @@ class RuleBasedDetector:
         # Atskiriame unikalius vardus (skenavimas) nuo pakartotinių (brute-force vienam vartotojui)
         users_by_ip: dict[str, set[str]] = defaultdict(set)
         attempts_by_ip: Counter = Counter()
+        lines_by_ip: dict[str, list[str]] = defaultdict(list)
 
         for entry in lines:
             match = user_pattern.search(entry["line"])
@@ -258,6 +267,8 @@ class RuleBasedDetector:
                 user, ip = match.group(1), match.group(2)
                 users_by_ip[ip].add(user)
                 attempts_by_ip[ip] += 1
+                if len(lines_by_ip[ip]) < SAMPLE_LINE_LIMIT:
+                    lines_by_ip[ip].append(entry["line"])
 
         for ip, users in users_by_ip.items():
             unique_user_count = len(users)
@@ -277,6 +288,7 @@ class RuleBasedDetector:
                         "unique_username_count": unique_user_count,
                         "attempt_count": attempts_by_ip[ip],
                     },
+                    sample_lines=lines_by_ip[ip],
                 ))
 
         return alerts
@@ -306,6 +318,7 @@ class RuleBasedDetector:
                     f"{len(lines)} per {window_minutes} min"
                 ),
                 details={"blocked_count": len(lines)},
+                sample_lines=[e["line"] for e in lines[:SAMPLE_LINE_LIMIT]],
             ))
 
         return alerts
@@ -385,6 +398,7 @@ class StatisticalDetector:
                         "z_score": round(z_score, 2),
                         "multiplier_threshold": LOG_SPIKE_MULTIPLIER,
                     },
+                    sample_lines=[e["line"] for e in lines[:SAMPLE_LINE_LIMIT]],
                 ))
 
         # Baseline atnaujiname po tikrinimo — current_count netraukiamas į savo paties matavimą.
@@ -422,6 +436,7 @@ class StatisticalDetector:
                         "total_count": total,
                         "error_rate": round(error_rate, 4),
                     },
+                    sample_lines=[e["line"] for e in error_lines[:SAMPLE_LINE_LIMIT]],
                 ))
 
         return alerts
@@ -704,7 +719,6 @@ def main():
     # Inicializuojame detektorius
     rule_detector = RuleBasedDetector(loki)
     stat_detector = StatisticalDetector(loki)
-    ml_detector = MLDetector(loki)
     alert_sender = AlertSender(ALERT_WEBHOOK_URL)
 
     # Alertų cooldown žodynas — slopina pasikartojančius alertus
@@ -746,9 +760,10 @@ def main():
             all_alerts.extend(stat_detector.check_log_volume_spike())
             all_alerts.extend(stat_detector.check_error_rate())
 
-            # 3. ML tikrinimas (kas 5-ą iteraciją - resursų taupymas)
-            if iteration % 5 == 0:
-                all_alerts.extend(ml_detector.detect())
+            # 3. ML sluoksnis (IsolationForest) išjungtas gyvame cikle — jis per dažnai
+            #    keldavo bendrinius „neįprasto elgesio" alertus (per daug klaidingų
+            #    teigiamų). Klasė `MLDetector` paliekama (naudojama testuose ir kaip
+            #    pagrindas tolimesniam darbui), tik nebekviečiama pagrindiniame cikle.
 
         except Exception as e:
             logger.error(f"Tikrinimo klaida: {e}", exc_info=True)
