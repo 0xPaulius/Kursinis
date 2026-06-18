@@ -18,7 +18,14 @@ from app.dependencies import (
     get_syslog_emitter,
     require_auth,
 )
-from app.models.schemas import Device, DeviceCreate, DeviceList, DeviceMap, SimulateResponse
+from app.models.schemas import (
+    DemoScenarioRequest,
+    Device,
+    DeviceCreate,
+    DeviceList,
+    DeviceMap,
+    SimulateResponse,
+)
 from app.services.alert_reader import AlertReader
 from app.services.device_monitor import DeviceMonitor
 from app.services.device_registry import DeviceRegistry
@@ -88,19 +95,41 @@ async def delete_device(
     return {"detail": "Įrenginys pašalintas"}
 
 
-@router.post("/{device_id}/simulate", response_model=SimulateResponse)
-async def simulate_attack(
-    device_id: str,
+def _resolve_demo_targets(registry: DeviceRegistry) -> tuple[dict | None, dict | None]:
+    """Parenka web serverio ir maršrutizatoriaus įrenginius demonstraciniam scenarijui."""
+    devices = registry.list_all()
+
+    def pick(hostname: str, os_type: str) -> dict | None:
+        return (next((d for d in devices if d.get("hostname") == hostname), None)
+                or next((d for d in devices if d.get("os") == os_type), None))
+
+    fallback = devices[0] if devices else None
+    web = pick("web-server-01", "server") or fallback
+    router = pick("router-01", "router") or web
+    return web, router
+
+
+@router.post("/demo/scenario", response_model=SimulateResponse)
+async def run_demo_scenario(
+    payload: DemoScenarioRequest,
     registry: Annotated[DeviceRegistry, Depends(get_device_registry)],
     emitter: Annotated[SyslogEmitter, Depends(get_syslog_emitter)],
 ) -> SimulateResponse:
-    """Paleidžia demonstracinę ataką prieš įrenginį (SSH brute-force + ugniasienės banga)."""
-    device = registry.get(device_id)
-    if device is None:
-        raise HTTPException(status_code=404, detail="Įrenginys nerastas")
-    attacker_ip = emitter.simulate_attack(device)
+    """
+    Paleidžia pasirinktą demonstracinę ataką, kurią aptinka tikras anomaly-detector:
+    "ssh_bruteforce" (web serveris), "firewall_spike" (maršrutizatorius) arba
+    "full" — pilnas daugiapakopis scenarijus (SSH + ugniasienė + klaidų šuolis).
+    """
+    web, router = _resolve_demo_targets(registry)
+    if web is None or router is None:
+        raise HTTPException(status_code=400, detail="Nėra registruotų įrenginių demonstracijai")
+    attacker_ip = emitter.simulate_attack(payload.attack, web, router)
+    target = {
+        "ssh_bruteforce": web["hostname"],
+        "firewall_spike": router["hostname"],
+    }.get(payload.attack, f"{web['hostname']} + {router['hostname']}")
     return SimulateResponse(
         detail="Demonstracinė ataka pradėta. Anomalijos pasirodys po kelių akimirkų.",
-        target=device["hostname"],
+        target=target,
         attacker_ip=attacker_ip,
     )

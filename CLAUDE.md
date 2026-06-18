@@ -9,7 +9,7 @@ Everything containerized in Docker Compose.
 
 ## Structure
 ```
-docker-compose.yml — 7 services (syslog-ng, promtail, loki, grafana, anomaly-detector, dashboard, log-generator)
+docker-compose.yml — 6 services (syslog-ng, promtail, loki, grafana, anomaly-detector, dashboard)
 .env / .env.example                  — GF_SECURITY_ADMIN_PASSWORD (gitignored)
 docs/ARCHITECTURE.md                 — LT architecture overview
 config/syslog-ng/syslog-ng.conf      — syslog receiver, filters, destinations
@@ -30,30 +30,26 @@ dashboard/app/services/device_registry.py — registered demo devices (JSON pers
 dashboard/app/services/syslog_emitter.py  — sends normal + attack syslog (UDP) to syslog-ng
 dashboard/app/services/host_info.py       — reads mounted host files for self-server kernel/OS version
 dashboard/app/services/device_monitor.py  — builds device map (per-host Loki stats + registry + self + discovered)
-dashboard/app/routers/devices.py     — device CRUD, attack simulation, GET /map (node map)
+dashboard/app/routers/devices.py     — device CRUD, demo attack scenario, GET /map (node map)
 dashboard/app/models/schemas.py      — Pydantic response models
 dashboard/Dockerfile                 — Python 3.12-slim + uvicorn
 demo_data/anomaly_history.json       — seed alert data for demo/testing
-log-generator/generator.py           — realistic syslog simulator with attack scenarios
-log-generator/Dockerfile
 seed_demo.sh                         — loads demo_data into kursinis_anomaly-data volume
 ```
 
 ## Commands
 - `docker compose up -d` — base stack (syslog-ng, promtail, loki, grafana, dashboard)
-- `docker compose --profile anomaly up -d` — recommended demo: base stack + anomaly detector (no log generator)
-- `docker compose --profile dev up -d` — also start standalone log generator (legacy synthetic traffic)
-- `docker compose --profile anomaly --profile dev up -d` — everything
+- `docker compose --profile anomaly up -d` — recommended demo: base stack + anomaly detector
 - `docker compose down -v` — teardown with volumes
 - `docker compose logs -f anomaly-detector` — watch detections
 - `docker compose restart dashboard` — apply dashboard code changes (or `up -d --build dashboard`)
 - `./seed_demo.sh` — load demo alert data into dashboard
 
 ### Demo flow (Devices tab)
-1. `docker compose --profile anomaly up -d` (the standalone `log-generator` is NOT needed)
+1. `docker compose --profile anomaly up -d`
 2. Open dashboard (8080) → Devices tab → "Add device": name + IP + OS (macOS / Windows 11). A per-OS setup tutorial is shown.
 3. Registered devices auto-emit normal syslog (dashboard `syslog_emitter` → syslog-ng) — visible in traffic graphs within ~30s.
-4. "Run demo" button → injects SSH brute-force + firewall spike against a device; the real anomaly-detector raises alerts on the Anomalies tab within ~60s.
+4. "Run demo" button → `POST /api/devices/demo/scenario` injects an SSH brute-force (web-server-01) + firewall DROP spike (router-01) + error burst; the real anomaly-detector raises alerts on the Anomalies tab within ~60s.
 
 ### Tests
 - `docker compose run --rm anomaly-detector pytest tests/ -v` — detector tests (requires `tests/` mounted or COPYed)
@@ -79,14 +75,16 @@ seed_demo.sh                         — loads demo_data into kursinis_anomaly-d
 - Anomaly detector queries Loki HTTP API (`/loki/api/v1/query_range`)
 - ML detector (IsolationForest) trains after ≥20 samples, runs every 5th cycle; training_data is deque(maxlen=500)
 - Anomaly detector writes alerts atomically (`tmp` + `os.replace`) to `/data/anomaly_history.json`
-- Log generator only with `--profile dev` — never in production; superseded for demos by the dashboard's built-in device-driven traffic
+- Synthetic traffic is dashboard-driven only: 4 demo devices (MacBook, Windows 11, `router-01`, `web-server-01`) are seeded into the registry (`SEED_DEFAULT_DEVICES`) and auto-emit normal traffic; the standalone log-generator has been removed
 - Dashboard reads Loki API for live traffic + anomaly_history.json for alerts (shared volume `anomaly-data`)
-- Dashboard device registry persists to `/state/devices.json` (rw volume `dashboard-state`); `SyslogEmitter` sends UDP syslog to `syslog-ng:514` reusing the generator's BSD format, so syslog-ng/Promtail/detector treat it identically
-- Background asyncio task emits per-device normal traffic every `NORMAL_TRAFFIC_INTERVAL` (default 5s) ONLY for `synthetic` registry devices; `POST /api/devices/{id}/simulate` fires an on-demand attack burst detected by the real anomaly-detector
-- Device node map (`GET /api/devices/map`): merges registered (synthetic) devices + the Docker host itself + any host auto-discovered from Loki `host` labels; each node gets live `logs_5m`/`logs_1h`/`last_seen`/`online` (online = logs in last 5 min) via `sum by (host)(count_over_time(...))`
+- Dashboard device registry persists to `/state/devices.json` (rw volume `dashboard-state`); `SyslogEmitter` sends UDP syslog to `syslog-ng:514` using the standard BSD syslog format, so syslog-ng/Promtail/detector treat it identically
+- Background asyncio task emits per-device normal traffic every `NORMAL_TRAFFIC_INTERVAL` (default 5s) ONLY for `synthetic` registry devices; `POST /api/devices/demo/scenario` fires an on-demand multi-device attack scenario (SSH brute-force + firewall DROP + error burst) detected by the real anomaly-detector
+- Live updates: `GET /api/stream` is a Server-Sent Events (SSE) endpoint (`routers/stream.py`, `StreamingResponse` `text/event-stream`) that pushes `health`/`traffic`/`alerts`/`devices` events only when their JSON changes (`STREAM_INTERVAL`=5s, devices every 3rd tick, `: ping` heartbeat). Frontend opens one `EventSource` in `init()` (replacing the old `setInterval` polling); each `apply*()` (split from `load*()`) re-renders. The traffic-history chart stays client-driven (range/host aware), refreshed on a throttled `maybeRefreshHistory()` when a `traffic` event arrives
+- Device node map (`GET /api/devices/map`): merges registered (synthetic) devices + the Docker host itself + any host auto-discovered from Loki `host` labels; each node gets live `logs_5m`/`logs_1h`/`last_seen`/`online` (online = logs in last 5 min) via `sum by (host)(count_over_time(...))`. Discovered hosts that are bare IPs (e.g. the Docker bridge gateway `172.18.0.1` from NAT'd port-published logs) and hostnames in the deleted-suppression list are excluded. The self/host node is shown with a generic name (`SELF_DEVICE_NAME`, default "Šis serveris") and its real hostname is hidden in the UI.
+- Deleting a device (`DELETE /api/devices/{id}`) records its hostname in `/state/deleted_hosts.json` (`SUPPRESSED_DB_PATH`) so it won't reappear as a "discovered" node while its logs age out of Loki (~1h); re-adding the same hostname clears the suppression
 - Self-host monitoring: point the host's rsyslog at `<host>:514`; its kernel/OS version comes from read-only mounts `/etc/hostname`, `/etc/os-release`, `/proc/version` -> `/host/*` (Linux host only; `HOST_INFO_DIR`)
 - Tutorials are frontend i18n (LT/EN); collector address shown to the user is `window.location.hostname:514`
-- Dashboard auth: demo Bearer token (sha256(username:salt)[:32]) enforced on all `/api/{traffic,alerts,health,devices}` routes via `Depends(require_auth)`; client sends `Authorization: Bearer <token>` after login
+- Dashboard auth: demo Bearer token (sha256(username:salt)[:32]) enforced on all `/api/{traffic,alerts,health,devices}` routes via `Depends(require_auth)`; client sends `Authorization: Bearer <token>` after login. The SSE `/api/stream` authenticates via `?token=` query param (browsers' `EventSource` can't set headers), validated with the same `verify_demo_token`
 - AlertReader is mtime-cached and injected via DI; alert IDs are deterministic sha1(ts|type|ip|host)[:16]
 - Health checker reports syslog-ng/promtail as `unknown` when Loki is down (cannot infer freshness without Loki)
 

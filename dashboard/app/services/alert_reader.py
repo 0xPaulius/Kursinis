@@ -16,6 +16,10 @@ logger = logging.getLogger(__name__)
 
 ANOMALY_DB_PATH = os.getenv("ANOMALY_DB_PATH", "/data/anomaly_history.json")
 
+# Alert tipai, kurių nerodome vartotojui. `ml_anomaly` (ML „neįprastas elgesys")
+# išjungtas — kėlė per daug klaidingų teigiamų ir buvo per dažnas, kad būtų naudingas.
+_EXCLUDED_ALERT_TYPES = {"ml_anomaly"}
+
 # ---------------------------------------------------------------------------
 # Vertimų žodynas: techninis tipas → vartotojui suprantama informacija
 # ---------------------------------------------------------------------------
@@ -76,17 +80,6 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
             "Esant problemoms — kreipkitės į IT specialistą."
         ),
     },
-    "ml_anomaly": {
-        "title": "Neįprastas sistemos elgesys",
-        "explanation": (
-            "Dirbtinis intelektas aptiko neįprastus sistemos veiklos pokyčius. "
-            "Tai gali būti ataka, gedimas arba neįprastas naudojimas."
-        ),
-        "recommendation": (
-            "Rekomenduojama: peržiūrėkite kitus šio laikotarpio įspėjimus. "
-            "Jei jų daug — nedelsiant informuokite IT specialistą."
-        ),
-    },
 }
 
 _DEFAULT_TRANSLATION = {
@@ -130,6 +123,7 @@ def _make_alert_item(raw: dict[str, Any]) -> AlertItem:
         source_host=raw.get("source_host", ""),
         detection_method=raw.get("detection_method", ""),
         details=raw.get("details", {}),
+        sample_lines=raw.get("sample_lines", []) or [],
     )
 
 
@@ -165,8 +159,12 @@ class AlertReader:
         try:
             with open(ANOMALY_DB_PATH, "r", encoding="utf-8") as fh:
                 raw_list: list[dict] = json.load(fh)
-            # Naujesni pirmi
-            self._cached = [_make_alert_item(r) for r in reversed(raw_list)]
+            # Naujesni pirmi; išfiltruojame išjungtus alert tipus (pvz. ml_anomaly).
+            self._cached = [
+                _make_alert_item(r)
+                for r in reversed(raw_list)
+                if r.get("alert_type") not in _EXCLUDED_ALERT_TYPES
+            ]
             self._cached_mtime = mtime
             return self._cached
         except (json.JSONDecodeError, OSError) as exc:

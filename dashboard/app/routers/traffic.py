@@ -10,7 +10,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
 
-from app.models.schemas import TrafficCurrent, TrafficHistory, TrafficPoint
+from app.models.schemas import LogLine, LogLines, TrafficCurrent, TrafficHistory, TrafficPoint
 from app.services.loki_client import AsyncLokiClient
 from app.dependencies import get_loki, require_auth
 
@@ -18,6 +18,35 @@ router = APIRouter(prefix="/api/traffic", tags=["traffic"], dependencies=[Depend
 
 # Leistini host etiketės simboliai — apsauga nuo LogQL injekcijos per `host` parametrą.
 _HOST_RE = re.compile(r"^[A-Za-z0-9._-]{1,255}$")
+
+
+def _ns_to_iso(ts_ns: str | int) -> str:
+    """Loki įrašo laiką (nanosekundėmis) verčia į ISO formatą."""
+    try:
+        sec = int(ts_ns) / 1e9
+        return datetime.datetime.fromtimestamp(sec, tz=datetime.timezone.utc).isoformat()
+    except (ValueError, TypeError, OSError):
+        return ""
+
+
+def _auto_step(hours: int) -> str:
+    """
+    Parenka Loki agregavimo žingsnį (ir count_over_time langą) pagal pasirinktą
+    intervalą, kad grafikas turėtų ~24-72 taškus nepriklausomai nuo lango ilgio.
+    Grafana stiliaus laiko parinkiklis siunčia skirtingus `hours`, tad žingsnis
+    turi prisitaikyti (1 val intervalui per valandinį žingsnį būtų vos 1 taškas).
+    """
+    if hours <= 1:
+        return "2m"
+    if hours <= 6:
+        return "10m"
+    if hours <= 12:
+        return "30m"
+    if hours <= 24:
+        return "1h"
+    if hours <= 48:
+        return "2h"
+    return "6h"
 
 
 @router.get("/current", response_model=TrafficCurrent)
@@ -65,16 +94,19 @@ async def get_traffic_history(
     now = datetime.datetime.now(datetime.timezone.utc)
     start = now - datetime.timedelta(hours=hours)
 
+    # Žingsnis prisitaiko prie lango — trumpiems intervalams smulkesnis skiriamumas.
+    step = _auto_step(hours)
+
     # Jei nurodytas validus host — filtruojame pagal jį; kitaip imame visą srautą.
     selector = '{job="syslog"}'
     if host and _HOST_RE.match(host):
         selector = f'{{job="syslog", host="{host}"}}'
 
     results = await loki.query_metric(
-        f'sum(count_over_time({selector}[1h]))',
+        f'sum(count_over_time({selector}[{step}]))',
         start=start,
         end=now,
-        step="1h",
+        step=step,
     )
 
     points: list[TrafficPoint] = []
@@ -111,3 +143,37 @@ async def get_traffic_history(
 
     points.sort(key=lambda p: p.time)
     return TrafficHistory(points=points)
+
+
+@router.get("/logs", response_model=LogLines)
+async def get_traffic_logs(
+    loki: Annotated[AsyncLokiClient, Depends(get_loki)],
+    limit: Annotated[int, Query(ge=1, le=500)] = 200,
+    host: Annotated[str | None, Query(max_length=255)] = None,
+    hours: Annotated[int, Query(ge=1, le=168)] = 24,
+) -> LogLines:
+    """
+    Naujausios žalios žurnalo eilutės (visi aptikti logai). Pateikus `host`
+    parametrą — tik nurodyto įrenginio logai. Naudojama „Visi logai" rodiniui.
+    """
+    now = datetime.datetime.now(datetime.timezone.utc)
+    start = now - datetime.timedelta(hours=hours)
+
+    selector = '{job="syslog"}'
+    if host and _HOST_RE.match(host):
+        selector = f'{{job="syslog", host="{host}"}}'
+
+    entries = await loki.query_range(selector, start=start, end=now, limit=limit)
+
+    # query_range grąžina naujausius pirmus (direction=backward).
+    lines = [
+        LogLine(
+            time=_ns_to_iso(e.get("timestamp", "")),
+            host=e.get("labels", {}).get("host", ""),
+            program=e.get("labels", {}).get("program", ""),
+            severity=e.get("labels", {}).get("severity", ""),
+            line=e.get("line", ""),
+        )
+        for e in entries[:limit]
+    ]
+    return LogLines(lines=lines, total=len(lines))
