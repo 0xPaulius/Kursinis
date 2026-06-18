@@ -38,6 +38,10 @@ def get_device_monitor(request: Request) -> DeviceMonitor:
     return request.app.state.device_monitor
 
 
+def get_notifier(request: Request):
+    return request.app.state.notifier
+
+
 def require_auth(authorization: str | None = Header(default=None)) -> None:
     """
     Tikrina `Authorization: Bearer <token>` antraštę.

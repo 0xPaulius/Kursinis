@@ -35,6 +35,7 @@ class AlertItem(BaseModel):
     source_host: str
     detection_method: str
     details: dict[str, Any]
+    sample_lines: list[str] = []   # raw log lines that triggered this alert
 
 
 class AlertList(BaseModel):
@@ -42,6 +43,20 @@ class AlertList(BaseModel):
     total: int
     page: int
     pages: int
+
+
+class LogLine(BaseModel):
+    """Viena žalia žurnalo eilutė iš Loki (su išgautomis etiketėmis)."""
+    time: str           # ISO timestamp (Loki entry time)
+    host: str = ""
+    program: str = ""
+    severity: str = ""
+    line: str = ""      # raw, full syslog line
+
+
+class LogLines(BaseModel):
+    lines: list[LogLine]
+    total: int
 
 
 class ServiceHealth(BaseModel):
@@ -83,6 +98,11 @@ class DeviceList(BaseModel):
     total: int
 
 
+class DemoScenarioRequest(BaseModel):
+    """Demonstracinės atakos pasirinkimas (Devices skydelio mygtukai)."""
+    attack: str = "full"   # "ssh_bruteforce" | "firewall_spike" | "full"
+
+
 class SimulateResponse(BaseModel):
     detail: str         # Lithuanian status message
     target: str         # Targeted device hostname
@@ -116,3 +136,10 @@ class DeviceMap(BaseModel):
     collector: CollectorNode
     devices: list[DeviceNode]
     generated_at: str
+
+
+class NotificationSettings(BaseModel):
+    """Pranešimų (webhook) nustatymai — saugomi /state/notify.json."""
+    enabled: bool = False
+    webhook_url: str = ""
+    min_severity: str = "medium"   # "low" | "medium" | "high" | "critical"

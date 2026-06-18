@@ -18,13 +18,38 @@ logger = logging.getLogger(__name__)
 
 DEVICES_DB_PATH = os.getenv("DEVICES_DB_PATH", "/state/devices.json")
 
+# Pašalintų įrenginių hostname'ai — kad ištrynus įrenginį jis nebegrįžtų kaip
+# „aptiktas" (jo logai Loki dar lieka ~1 val po pašalinimo).
+SUPPRESSED_DB_PATH = os.getenv("SUPPRESSED_DB_PATH", "/state/deleted_hosts.json")
+
+# Ar paleidžiant užtikrinti numatytuosius demonstracinius įrenginius
+# (MacBook, Windows 11 PC, maršrutizatorius, web serveris).
+SEED_DEFAULT_DEVICES = os.getenv("SEED_DEFAULT_DEVICES", "1").lower() not in {"0", "false", "no"}
+
 VALID_OS = {"macos", "windows"}
 
 # Reprezentacinės OS versijos demonstraciniams įrenginiams (galima keisti pridedant)
 DEFAULT_OS_VERSION = {
     "macos": "macOS 14 (Sonoma)",
     "windows": "Windows 11 (23H2)",
+    "router": "RouterOS 7.14",
+    "server": "Ubuntu Server 22.04 LTS",
 }
+
+# Numatytieji demonstraciniai įrenginiai — kad sistema iškart turėtų realistišką
+# srautą (žemėlapis + „Paleisti demonstraciją" mygtukas). Dashboard fonis ciklas
+# (main.py) generuoja jiems normalų srautą, tad jie matomi kaip aktyvūs. Pridedami
+# tik jei jų dar nėra (neperrašo vartotojo pridėtų įrenginių).
+DEFAULT_DEVICES = [
+    {"id": "default-macbook", "name": "MacBook", "hostname": "macbook",
+     "ip": "192.168.1.50", "os": "macos"},
+    {"id": "default-win11", "name": "Windows 11 PC", "hostname": "windows-11-pc",
+     "ip": "192.168.1.60", "os": "windows"},
+    {"id": "default-router", "name": "Maršrutizatorius", "hostname": "router-01",
+     "ip": "192.168.1.1", "os": "router"},
+    {"id": "default-webserver", "name": "Web serveris", "hostname": "web-server-01",
+     "ip": "192.168.1.10", "os": "server"},
+]
 
 _IP_RE = re.compile(r"^(\d{1,3})\.(\d{1,3})\.(\d{1,3})\.(\d{1,3})$")
 
@@ -51,6 +76,37 @@ class DeviceRegistry:
 
     def __init__(self) -> None:
         self._devices: list[dict] = self._load()
+        self._suppressed: set[str] = self._load_suppressed()
+        if SEED_DEFAULT_DEVICES:
+            self._ensure_defaults()
+
+    # -- Numatytieji įrenginiai ----------------------------------------------
+
+    def _ensure_defaults(self) -> None:
+        """Prideda numatytuosius įrenginius, jei jų dar nėra (pagal hostname)."""
+        existing = {d.get("hostname") for d in self._devices}
+        changed = False
+        now = datetime.datetime.now(datetime.timezone.utc).isoformat()
+        for d in DEFAULT_DEVICES:
+            if d["hostname"] in existing:
+                continue
+            self._devices.append({
+                "id": d["id"],
+                "name": d["name"],
+                "hostname": d["hostname"],
+                "ip": d["ip"],
+                "os": d["os"],
+                "os_version": DEFAULT_OS_VERSION.get(d["os"], ""),
+                "synthetic": True,
+                "enabled": True,
+                "created_at": now,
+            })
+            self._suppressed.discard(d["hostname"])
+            changed = True
+        if changed:
+            self._save()
+            self._save_suppressed()
+            logger.info("Numatytieji demonstraciniai įrenginiai užtikrinti")
 
     # -- Persistencija --------------------------------------------------------
 
@@ -80,6 +136,32 @@ class DeviceRegistry:
         except OSError as exc:
             logger.error("Įrenginių failo rašymo klaida: %s", exc)
 
+    def _load_suppressed(self) -> set[str]:
+        if not os.path.exists(SUPPRESSED_DB_PATH):
+            return set()
+        try:
+            with open(SUPPRESSED_DB_PATH, "r", encoding="utf-8") as fh:
+                data = json.load(fh)
+            if isinstance(data, list):
+                return {str(h) for h in data}
+        except (json.JSONDecodeError, OSError) as exc:
+            logger.warning("Pašalintų įrenginių failo skaitymo klaida: %s", exc)
+        return set()
+
+    def _save_suppressed(self) -> None:
+        try:
+            db_dir = os.path.dirname(SUPPRESSED_DB_PATH)
+            if db_dir:
+                os.makedirs(db_dir, exist_ok=True)
+            tmp_path = f"{SUPPRESSED_DB_PATH}.tmp"
+            with open(tmp_path, "w", encoding="utf-8") as fh:
+                json.dump(sorted(self._suppressed), fh, ensure_ascii=False)
+                fh.flush()
+                os.fsync(fh.fileno())
+            os.replace(tmp_path, SUPPRESSED_DB_PATH)
+        except OSError as exc:
+            logger.error("Pašalintų įrenginių failo rašymo klaida: %s", exc)
+
     # -- Pagalbinės -----------------------------------------------------------
 
     def _unique_hostname(self, base: str) -> str:
@@ -95,6 +177,10 @@ class DeviceRegistry:
 
     def list_all(self) -> list[dict]:
         return list(self._devices)
+
+    def suppressed_hostnames(self) -> set[str]:
+        """Pašalintų įrenginių hostname'ai — nerodomi kaip „aptikti"."""
+        return set(self._suppressed)
 
     def get(self, device_id: str) -> dict | None:
         return next((d for d in self._devices if d["id"] == device_id), None)
@@ -125,14 +211,21 @@ class DeviceRegistry:
         }
         self._devices.append(device)
         self._save()
+        if device["hostname"] in self._suppressed:
+            self._suppressed.discard(device["hostname"])
+            self._save_suppressed()
         logger.info("Pridėtas įrenginys: %s (%s, %s)", device["hostname"], ip, os_type)
         return device
 
     def delete(self, device_id: str) -> bool:
-        before = len(self._devices)
-        self._devices = [d for d in self._devices if d["id"] != device_id]
-        if len(self._devices) == before:
+        device = self.get(device_id)
+        if device is None:
             return False
+        self._devices = [d for d in self._devices if d["id"] != device_id]
         self._save()
-        logger.info("Pašalintas įrenginys: %s", device_id)
+        hostname = device.get("hostname", "")
+        if hostname:
+            self._suppressed.add(hostname)
+            self._save_suppressed()
+        logger.info("Pašalintas įrenginys: %s (%s)", device_id, hostname)
         return True

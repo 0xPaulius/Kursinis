@@ -13,6 +13,8 @@ from __future__ import annotations
 
 import datetime
 import logging
+import os
+import re
 
 from app.services.alert_reader import AlertReader
 from app.services.device_registry import DEFAULT_OS_VERSION, DeviceRegistry
@@ -23,6 +25,11 @@ logger = logging.getLogger(__name__)
 
 _SEV_RANK = {"low": 1, "medium": 2, "high": 3, "critical": 4}
 _NS = 1_000_000_000
+
+# Savo serverio (host) rodomas vardas — be realaus hostname (pvz. „bombiteris").
+SELF_DEVICE_NAME = os.getenv("SELF_DEVICE_NAME", "Šis serveris")
+# Gryni IP kaip host (pvz. 172.18.0.1 — Docker tinklo šliuzas) — tai ne įrenginys.
+_IP_ONLY = re.compile(r"^\d{1,3}(\.\d{1,3}){3}$")
 
 
 def _ns_to_iso(ts_ns: str) -> str:
@@ -116,23 +123,29 @@ class DeviceMonitor:
                 "source": "registered",
             }
 
-        # 2. Savas serveris (Docker host)
+        # 2. Savas serveris (Docker host) — vardas bendrinis (be realaus hostname).
         host = self._host_info.get()
         if host and host.get("hostname"):
             h = host["hostname"]
-            node = nodes.get(h, {"id": f"host:{h}", "name": f"Šis serveris ({h})", "hostname": h, "ip": ""})
+            node = nodes.get(h, {"id": f"host:{h}", "name": SELF_DEVICE_NAME, "hostname": h, "ip": ""})
             node["source"] = "self"
             node["os"] = host.get("os", "linux")
             node["os_version"] = host.get("os_version", "")
             nodes[h] = node
 
-        # 3. Aptikti host'ai (siunčia logus, bet nėra registre)
+        # 3. Aptikti host'ai (siunčia logus, bet nėra registre).
+        #    Praleidžiame grynus IP (Docker šliuzas, pvz. 172.18.0.1 — NAT'inti logai
+        #    be hostname) ir pašalintus įrenginius (kad ištrynus negrįžtų).
+        suppressed = self._registry.suppressed_hostnames()
         for h in stats:
-            if h not in nodes:
-                nodes[h] = {
-                    "id": f"host:{h}", "name": h, "hostname": h,
-                    "ip": "", "os": "unknown", "os_version": "", "source": "discovered",
-                }
+            if h in nodes:
+                continue
+            if _IP_ONLY.match(h) or h in suppressed:
+                continue
+            nodes[h] = {
+                "id": f"host:{h}", "name": h, "hostname": h,
+                "ip": "", "os": "unknown", "os_version": "", "source": "discovered",
+            }
 
         # Statistika + įspėjimai
         alerts = self._alert_reader.read_all()

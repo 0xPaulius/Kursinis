@@ -113,7 +113,7 @@ services:
     restart: unless-stopped
     environment:
       - LOKI_URL=http://loki:3100
-      - CHECK_INTERVAL=60          # Tikrinimo intervalas sekundėmis
+      - CHECK_INTERVAL=5           # Tikrinimo intervalas sekundėmis (demonstracijai — greiti alertai)
       - SSH_BRUTE_THRESHOLD=5      # Max nesėkmingų SSH per langą
       - LOG_SPIKE_MULTIPLIER=3.0   # Kiek kartų viršyti vidurkį = spike
       - ALERT_WEBHOOK_URL=         # Telegram/Slack webhook (optional)
@@ -168,27 +168,6 @@ services:
         condition: service_healthy
       syslog-ng:
         condition: service_started
-
-  # ============================================================
-  # 7. LOG GENERATOR - Testinių logų generatorius (DEV ONLY)
-  #    Generuoja realistiškus logus testavimui
-  #    Pašalinti production aplinkoje!
-  # ============================================================
-  log-generator:
-    build:
-      context: ./log-generator
-      dockerfile: Dockerfile
-    container_name: log-generator
-    restart: unless-stopped
-    environment:
-      - SYSLOG_HOST=syslog-ng
-      - SYSLOG_PORT=514
-    networks:
-      - lognet
-    depends_on:
-      - syslog-ng
-    profiles:
-      - dev   # Paleidžiamas tik su: docker compose --profile dev up
 
 # ============================================================
 # TINKLAI IR VOLUMES

@@ -61,32 +61,26 @@ cp .env.example .env
 # Pakeiskite GF_SECURITY_ADMIN_PASSWORD reikšmę
 ```
 
-### 2. Bazinis stackas (be testinių logų)
+### 2. Bazinis stackas
 
 ```bash
 docker compose up -d
 ```
 
-### 3. Su testinių logų generatoriumi
+Dashboard automatiškai generuoja sintetinį įrenginių srautą (MacBook, Windows 11,
+maršrutizatorius, web serveris), tad grafikai užsipildo per ~30 s.
 
-```bash
-docker compose --profile dev up -d
-```
-
-### 4. Su anomalijų aptikimu
+### 3. Su anomalijų aptikimu (rekomenduojama demo režimui)
 
 ```bash
 docker compose --profile anomaly up -d
-```
-
-### 5. Viskas kartu (demo režimas)
-
-```bash
-docker compose --profile dev --profile anomaly up -d
 ./seed_demo.sh   # įkelia demo alertus į dashboard'ą
 ```
 
-### 6. Tikrinimas
+Įrenginių skiltyje paspaudus „Paleisti demonstraciją" sugeneruojamas kenkėjiškas
+srautas (SSH brute-force + ugniasienės banga), kurį aptinka anomaly-detector.
+
+### 4. Tikrinimas
 
 - **Dashboard**: http://localhost:8080 (admin / admin123)
 - **Grafana**: http://localhost:3000 (admin / `$GF_SECURITY_ADMIN_PASSWORD`)
@@ -186,9 +180,6 @@ docker compose run --rm anomaly-detector pytest tests/ -v
 │       └── static/                  # index.html, login.html, css/, js/, fonts/
 ├── demo_data/
 │   └── anomaly_history.json         # Demo alertų duomenys
-├── log-generator/
-│   ├── Dockerfile
-│   └── generator.py                 # Testinių logų generatorius
 ├── seed_demo.sh                     # Demo duomenų įkėlimo skriptas
 ├── CLAUDE.md                        # Agent kontekstas
 └── README.md
