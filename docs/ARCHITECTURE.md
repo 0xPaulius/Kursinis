@@ -76,12 +76,12 @@ Be Grafana, sistema turi savą FastAPI dashboard'ą su lietuviška sąsaja.
    - Šaltinis: `dashboard/app/`
    - Web UI portas 8080
    - Dvikalbis UI (LT/EN)
-   - Backend: `routers/` (auth, traffic, alerts, health) + `services/` (loki_client, alert_reader, health_checker)
+   - Backend: `routers/` (auth, traffic, alerts, health, devices, notifications, stream) + `services/` (loki_client, alert_reader, health_checker, device_registry, device_monitor, syslog_emitter, notifier, host_info)
    - Pydantic modeliai: `models/schemas.py`
    - Frontend: Vanilla JS + Tailwind + Chart.js
    - Auth: demo kredencialai admin / admin123, Bearer token Authorization antraštėje
    - Skaito Loki API gyvam srautui, `/data/anomaly_history.json` alertams
-   - Generuoja sintetinį įrenginių srautą (normalų) ir „Paleisti demonstraciją" ataką tiesiai į `syslog-ng:514` (atskiras generatorius nebereikalingas)
+   - Generuoja sintetinį įrenginių srautą (normalų) ir demonstracines atakas tiesiai į `syslog-ng:514` („Paleisti ataką" meniu: SSH brute-force / ugniasienės skenavimas; „Testuoti ML detektorių" — pilnas scenarijus; atskiras generatorius nebereikalingas)
 
 ## Failų struktūra
 
@@ -98,8 +98,8 @@ anomaly-detector/
 dashboard/
   app/
     main.py, dependencies.py
-    routers/   — auth, traffic, alerts, health
-    services/  — loki_client, alert_reader, health_checker
+    routers/   — auth, traffic, alerts, health, devices, notifications, stream
+    services/  — loki_client, alert_reader, health_checker, device_registry, device_monitor, syslog_emitter, notifier, host_info
     models/schemas.py
     static/    — index.html, login.html, css/, js/, fonts/
   Dockerfile, requirements.txt
