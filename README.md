@@ -77,8 +77,10 @@ docker compose --profile anomaly up -d
 ./seed_demo.sh   # įkelia demo alertus į dashboard'ą
 ```
 
-Įrenginių skiltyje paspaudus „Paleisti demonstraciją" sugeneruojamas kenkėjiškas
-srautas (SSH brute-force + ugniasienės banga), kurį aptinka anomaly-detector.
+Įrenginių skiltyje „Paleisti ataką" mygtukas atveria meniu su konkrečiomis atakomis
+(SSH slaptažodžių ataka, ugniasienės / prievadų skenavimas), o „Testuoti ML detektorių"
+paleidžia pilną daugiapakopį scenarijų. Sugeneruotą kenkėjišką srautą aptinka
+anomaly-detector ir per ~60 s parodo anomalijas „Anomalijų" skiltyje.
 
 ### 4. Tikrinimas
 
@@ -135,8 +137,9 @@ Papildoma žiniatinklio sąsaja šalia Grafana, pasiekiama per `http://localhost
 - **Technologijos**: FastAPI + Uvicorn (backend), Vanilla JS + Tailwind CSS + Chart.js (frontend)
 - **Kalba**: Lietuvių / Anglų (perjungiama UI)
 - **Prisijungimas**: admin / admin123
-- **Autentifikacija**: Bearer token (sha256 hash) — taikomas visiems `/api/{traffic,alerts,health}` maršrutams
-- **Funkcijos**: logų srauto stebėjimas, anomalijų peržiūra, įrenginių sąrašas, paieška, sistemos būklė
+- **Autentifikacija**: Bearer token (sha256 hash) — taikomas visiems `/api/{traffic,alerts,health,devices}` maršrutams
+- **Funkcijos**: logų srauto stebėjimas, anomalijų peržiūra, įrenginių sąrašas ir žemėlapis, demonstracinės atakos, webhook pranešimai, paieška, sistemos būklė
+- **Gyvi atnaujinimai**: Server-Sent Events (`/api/stream`) — pultas atsinaujina realiu laiku be perkrovimo
 
 ## Testavimas
 
@@ -174,8 +177,8 @@ docker compose run --rm anomaly-detector pytest tests/ -v
 │   └── app/
 │       ├── main.py                  # FastAPI aplikacija
 │       ├── dependencies.py          # DI + require_auth
-│       ├── routers/                 # auth, traffic, alerts, health, devices
-│       ├── services/                # loki_client, alert_reader, health_checker, device_registry, syslog_emitter
+│       ├── routers/                 # auth, traffic, alerts, health, devices, notifications, stream (SSE)
+│       ├── services/                # loki_client, alert_reader, health_checker, device_registry, device_monitor, syslog_emitter, notifier, host_info
 │       ├── models/schemas.py        # Pydantic modeliai
 │       └── static/                  # index.html, login.html, css/, js/, fonts/
 ├── demo_data/
