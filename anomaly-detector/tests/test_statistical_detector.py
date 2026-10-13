@@ -3,24 +3,35 @@ Statistinio detektoriaus testai.
 """
 from __future__ import annotations
 
+import datetime
+
 import detector
-from detector import StatisticalDetector
+from detector import LokiClient, StatisticalDetector
+
+T0 = datetime.datetime(2022, 1, 24, 0, 0, tzinfo=datetime.timezone.utc)
 
 
-class FakeLokiClient:
-    """Grąžina iš anksto paruoštą atsakymą kiekvienai užklausai."""
+class FakeLokiClient(LokiClient):
+    """Grąžina iš anksto paruoštus kiekius pagal srautą (syslog / errors)."""
 
-    def __init__(self, lines_by_query: dict[str, list[dict]] | None = None,
-                 default_lines: list[dict] | None = None):
-        self._by_query = lines_by_query or {}
-        self._default = default_lines or []
+    def __init__(self, counts: dict[str, float] | None = None, default: float = 0.0):
+        super().__init__("http://fake")
+        self.counts = counts or {}
+        self.default = default
 
-    def query_range(self, query: str, start=None, end=None, limit: int = 5000) -> list[dict]:
-        return self._by_query.get(query, self._default)
+    def instant_query(self, query, at=None):
+        for selector, value in self.counts.items():
+            if selector in query:
+                return [{"labels": {}, "value": value}]
+        return [{"labels": {}, "value": self.default}]
+
+    def query_range(self, query, start=None, end=None, limit=5000):
+        return [{"timestamp": "0", "line": "test", "labels": {}}] * min(limit, 3)
 
 
-def _entry() -> dict:
-    return {"timestamp": "0", "line": "test", "labels": {}}
+def _seed(det: StatisticalDetector, values: list[float], start: datetime.datetime = T0):
+    for i, value in enumerate(values):
+        det._update_baseline(start + datetime.timedelta(minutes=i), value)
 
 
 # ---------------------------------------------------------------------------
@@ -29,19 +40,19 @@ def _entry() -> dict:
 
 def test_volume_spike_silent_during_warmup():
     """Pirmi 5 ciklai turi tik kaupti baseline, ne alertinti."""
-    det = StatisticalDetector(FakeLokiClient(default_lines=[_entry()] * 10))
-    for _ in range(5):
-        assert det.check_log_volume_spike() == []
+    det = StatisticalDetector(FakeLokiClient(default=10))
+    for i in range(5):
+        assert det.check_log_volume_spike(now=T0 + datetime.timedelta(minutes=i)) == []
     # Po 5 ciklų baseline užpildyta; 6-as gali tikrinti, bet std=0 todėl tylu.
     assert len(det.baseline_history) == 5
 
 
 def test_volume_spike_no_alert_on_stable_traffic():
     """Stabilus srautas → jokio z-score viršyto slenksčio."""
-    det = StatisticalDetector(FakeLokiClient(default_lines=[_entry()] * 10))
+    det = StatisticalDetector(FakeLokiClient(default=10))
     alerts: list = []
-    for _ in range(20):
-        alerts.extend(det.check_log_volume_spike())
+    for i in range(20):
+        alerts.extend(det.check_log_volume_spike(now=T0 + datetime.timedelta(minutes=i)))
     assert alerts == []
 
 
@@ -49,33 +60,41 @@ def test_volume_spike_triggers_on_huge_jump(monkeypatch):
     """Po normalios baseline'os, didelis šuolis turi triggerinti alertą."""
     monkeypatch.setattr(detector, "LOG_SPIKE_MULTIPLIER", 3.0)
 
-    det = StatisticalDetector(FakeLokiClient(default_lines=[]))
+    det = StatisticalDetector(FakeLokiClient(default=1000))
     # Įvairi baseline (kitaip std=0 ir z-score neapibrėžtas)
-    det.baseline_history = [8.0, 10.0, 12.0, 9.0, 11.0, 10.0, 9.0, 11.0]
+    _seed(det, [8.0, 10.0, 12.0, 9.0, 11.0, 10.0, 9.0, 11.0])
 
-    # Simuliuojame šuolį
-    det.loki = FakeLokiClient(default_lines=[_entry()] * 1000)
-    alerts = det.check_log_volume_spike()
+    alerts = det.check_log_volume_spike(now=T0 + datetime.timedelta(minutes=10))
 
     assert len(alerts) == 1
     assert alerts[0].alert_type == "log_volume_spike"
     assert alerts[0].details["z_score"] > 3.0
+    assert alerts[0].details["current_count"] == 1000
 
 
 def test_volume_spike_no_alert_when_std_is_zero():
     """Jei visi baseline įrašai identiški (std=0), netriggeriname (apsauga nuo dalybos iš 0)."""
-    det = StatisticalDetector(FakeLokiClient(default_lines=[_entry()] * 1000))
-    det.baseline_history = [10.0] * 10
-    assert det.check_log_volume_spike() == []
+    det = StatisticalDetector(FakeLokiClient(default=1000))
+    _seed(det, [10.0] * 10)
+    assert det.check_log_volume_spike(now=T0 + datetime.timedelta(minutes=10)) == []
 
 
-def test_volume_spike_history_bounded():
-    """baseline_history negali augti be ribos."""
-    det = StatisticalDetector(FakeLokiClient(default_lines=[_entry()]))
-    det.max_history = 5
-    for _ in range(20):
-        det.check_log_volume_spike()
-    assert len(det.baseline_history) <= 5
+def test_volume_spike_history_bounded_by_time():
+    """baseline_history laikomas tik BASELINE_WINDOW_HOURS laiko langu."""
+    det = StatisticalDetector(FakeLokiClient(default=1))
+    det.baseline_window_hours = 1
+    for i in range(180):  # 3 val. kas minutę
+        det.check_log_volume_spike(now=T0 + datetime.timedelta(minutes=i))
+    oldest, newest = det.baseline_history[0][0], det.baseline_history[-1][0]
+    assert newest - oldest <= 3600
+    assert len(det.baseline_history) == 61
+
+
+def test_volume_count_comes_from_metric_query():
+    """Kiekis neapribotas 5000 eilučių — imamas iš count_over_time."""
+    det = StatisticalDetector(FakeLokiClient(default=12000))
+    det.check_log_volume_spike(now=T0)
+    assert det.baseline_history[-1][1] == 12000
 
 
 # ---------------------------------------------------------------------------
@@ -84,10 +103,7 @@ def test_volume_spike_history_bounded():
 
 def test_error_rate_triggers_above_30_percent():
     """>30% klaidų santykis turi triggerinti alertą."""
-    loki = FakeLokiClient({
-        '{job="syslog"}': [_entry()] * 100,
-        '{job="errors"}': [_entry()] * 40,
-    })
+    loki = FakeLokiClient({'{job="syslog"}': 100, '{job="errors"}': 40})
     alerts = StatisticalDetector(loki).check_error_rate()
     assert len(alerts) == 1
     assert alerts[0].alert_type == "high_error_rate"
@@ -96,16 +112,10 @@ def test_error_rate_triggers_above_30_percent():
 
 def test_error_rate_silent_on_low_volume():
     """Mažas bendras kiekis (<=10) — netinka statistikai."""
-    loki = FakeLokiClient({
-        '{job="syslog"}': [_entry()] * 5,
-        '{job="errors"}': [_entry()] * 5,
-    })
+    loki = FakeLokiClient({'{job="syslog"}': 5, '{job="errors"}': 5})
     assert StatisticalDetector(loki).check_error_rate() == []
 
 
 def test_error_rate_silent_on_normal_ratio():
-    loki = FakeLokiClient({
-        '{job="syslog"}': [_entry()] * 100,
-        '{job="errors"}': [_entry()] * 10,
-    })
+    loki = FakeLokiClient({'{job="syslog"}': 100, '{job="errors"}': 10})
     assert StatisticalDetector(loki).check_error_rate() == []
