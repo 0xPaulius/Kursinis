@@ -1,0 +1,66 @@
+////////////////////////////////////////////////////////////////////
+// Grafana Alloy agentas Windows endpoint'e (laboratorijos darbo vieta)
+//
+// Skaito tris įvykių žurnalo kanalus ir siunčia į kolektoriaus šliuzą
+// (config/alloy/gateway.alloy, :3500) per TLS su kliento sertifikatu (mTLS).
+//
+// provision.ps1 pakeičia COLLECTOR, 3500 ir C:\kursinis-certs tikromis reikšmėmis.
+// Žymimas job="windows" (šliuzo allowlist jį praleidžia); host, channel — etiketės.
+// Likę laukai (event_id, event_data, message, levelText ...) lieka JSON eilutėje,
+// kurią parsina windows_rules.py detektoriuje.
+////////////////////////////////////////////////////////////////////
+
+loki.source.windowsevent "security" {
+	eventlog_name          = "Security"
+	use_incoming_timestamp = true
+	forward_to             = [loki.process.windows.receiver]
+}
+
+loki.source.windowsevent "sysmon" {
+	eventlog_name          = "Microsoft-Windows-Sysmon/Operational"
+	use_incoming_timestamp = true
+	forward_to             = [loki.process.windows.receiver]
+}
+
+loki.source.windowsevent "powershell" {
+	eventlog_name          = "Microsoft-Windows-PowerShell/Operational"
+	use_incoming_timestamp = true
+	forward_to             = [loki.process.windows.receiver]
+}
+
+loki.process "windows" {
+	forward_to = [loki.write.collector.receiver]
+
+	// Etiketėms imame tik mažo kardinalumo laukus (host, channel); JSON lieka log eilute.
+	stage.json {
+		expressions = {
+			computer = "computer",
+			channel  = "channel",
+		}
+	}
+
+	stage.labels {
+		values = {
+			host    = "computer",
+			channel = "channel",
+		}
+	}
+
+	stage.static_labels {
+		values = {
+			job = "windows",
+		}
+	}
+}
+
+loki.write "collector" {
+	endpoint {
+		url = "https://COLLECTOR:3500/loki/api/v1/push"
+
+		tls_config {
+			ca_file   = "C:\\kursinis-certs\\ca.crt"
+			cert_file = "C:\\kursinis-certs\\client.crt"
+			key_file  = "C:\\kursinis-certs\\client.key"
+		}
+	}
+}
