@@ -10,10 +10,11 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException
 
-from app.dependencies import get_notifier, require_auth
+from app.dependencies import get_notifier, require_admin, require_auth
 from app.models.schemas import NotificationSettings
 from app.services.notifier import VALID_SEVERITIES, Notifier, is_valid_webhook
 
+# Skaitymas — bet kuriam prisijungusiam; keitimas/testas — tik admin (žr. maršrutus).
 router = APIRouter(
     prefix="/api/notifications",
     tags=["notifications"],
@@ -29,7 +30,7 @@ async def get_settings(
     return NotificationSettings(**notifier.load_settings())
 
 
-@router.put("/settings", response_model=NotificationSettings)
+@router.put("/settings", response_model=NotificationSettings, dependencies=[Depends(require_admin)])
 async def update_settings(
     payload: NotificationSettings,
     notifier: Annotated[Notifier, Depends(get_notifier)],
@@ -45,7 +46,7 @@ async def update_settings(
     return payload
 
 
-@router.post("/test")
+@router.post("/test", dependencies=[Depends(require_admin)])
 async def test_notification(
     payload: NotificationSettings,
     notifier: Annotated[Notifier, Depends(get_notifier)],

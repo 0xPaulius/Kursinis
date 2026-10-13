@@ -2,7 +2,7 @@
 Syslog siuntiklis — generuoja demonstracinį srautą tiesiai į syslog-ng.
 
 Formatas — standartinis BSD syslog per UDP, tad
-syslog-ng / Promtail / anomaly-detector apdoroja jį lygiai taip pat:
+syslog-ng / Alloy / anomaly-detector apdoroja jį lygiai taip pat:
 
     <pri>MMM dd HH:MM:SS HOST program: message
 
@@ -125,7 +125,14 @@ class SyslogEmitter:
             user = random.choice(_BRUTE_USERS)
             port = random.randint(40000, 65535)
             # Dalis bandymų su neegzistuojančiu vartotoju → suveikia ir invalid_user_scan.
-            prefix = "invalid user " if i % 2 == 0 else ""
+            # Kaip tikras OpenSSH: pirma „Invalid user ...", po to „Failed password for invalid user ...".
+            invalid = i % 2 == 0
+            if invalid:
+                self._send_line(build_syslog_line(
+                    target_host, "auth", "info", "sshd",
+                    f"Invalid user {user} from {attacker_ip} port {port}",
+                ))
+            prefix = "invalid user " if invalid else ""
             self._send_line(build_syslog_line(
                 target_host, "auth", "warning", "sshd",
                 f"Failed password for {prefix}{user} from {attacker_ip} port {port} ssh2",

@@ -20,7 +20,7 @@ from fastapi import APIRouter, HTTPException, Query, Request
 from fastapi.responses import StreamingResponse
 
 from app.routers.alerts import get_alerts_recent
-from app.routers.auth import verify_demo_token
+from app.routers.auth import verify_token
 from app.routers.health import get_health_status
 from app.routers.traffic import get_traffic_current
 
@@ -48,7 +48,7 @@ async def stream(request: Request, token: str = Query(...)) -> StreamingResponse
     `devices`. Kiekvienas siunčiamas tik pasikeitus duomenims; `: ping` palaiko
     jungtį gyvą.
     """
-    if not verify_demo_token(token):
+    if verify_token(token) is None:
         raise HTTPException(status_code=401, detail="Neteisingas arba pasibaigęs tokenas")
 
     app_state = request.app.state

@@ -16,6 +16,7 @@ from app.dependencies import (
     get_device_monitor,
     get_device_registry,
     get_syslog_emitter,
+    require_admin,
     require_auth,
 )
 from app.models.schemas import (
@@ -68,7 +69,7 @@ async def device_map(
     return DeviceMap(**await monitor.build_map())
 
 
-@router.post("", response_model=Device, status_code=201)
+@router.post("", response_model=Device, status_code=201, dependencies=[Depends(require_admin)])
 async def create_device(
     payload: DeviceCreate,
     registry: Annotated[DeviceRegistry, Depends(get_device_registry)],
@@ -78,13 +79,14 @@ async def create_device(
     try:
         device = registry.add(
             name=payload.name, ip=payload.ip, os_type=payload.os, os_version=payload.os_version,
+            synthetic=payload.synthetic,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     return _annotate(device, reader)
 
 
-@router.delete("/{device_id}")
+@router.delete("/{device_id}", dependencies=[Depends(require_admin)])
 async def delete_device(
     device_id: str,
     registry: Annotated[DeviceRegistry, Depends(get_device_registry)],
@@ -109,7 +111,7 @@ def _resolve_demo_targets(registry: DeviceRegistry) -> tuple[dict | None, dict |
     return web, router
 
 
-@router.post("/demo/scenario", response_model=SimulateResponse)
+@router.post("/demo/scenario", response_model=SimulateResponse, dependencies=[Depends(require_admin)])
 async def run_demo_scenario(
     payload: DemoScenarioRequest,
     registry: Annotated[DeviceRegistry, Depends(get_device_registry)],

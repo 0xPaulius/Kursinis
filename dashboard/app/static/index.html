@@ -135,6 +135,10 @@ tailwind.config = {
       <span class="material-symbols-outlined nav-icon text-[20px]">router</span>
       <span id="nav-label-devices" class="text-label-md font-label">Įrenginiai</span>
     </button>
+    <button class="nav-btn" id="nav-attack" onclick="navigate('attack')">
+      <span class="material-symbols-outlined nav-icon text-[20px]">shield</span>
+      <span id="nav-label-attack" class="text-label-md font-label">ATT&CK aprėptis</span>
+    </button>
     <button class="nav-btn" id="nav-messages" onclick="navigate('messages')">
       <span class="material-symbols-outlined nav-icon text-[20px]">notifications_active</span>
       <span id="nav-label-messages" class="text-label-md font-label">Pranešimai</span>
@@ -537,6 +541,20 @@ tailwind.config = {
     </div>
   </section>
 
+  <!-- ======================== ATT&CK APRĖPTIS ======================== -->
+  <section id="page-attack" class="page space-y-stack_lg">
+    <header>
+      <h2 id="attack-page-title" class="text-headline-lg font-headline text-primary mb-1">MITRE ATT&CK aprėptis</h2>
+      <p id="attack-desc" class="text-body-md font-body text-on-surface-variant">Kurias atakų technikas sistema geba aptikti ir kurios realiai suveikė žurnaluose.</p>
+    </header>
+
+    <div id="attack-summary" class="grid grid-cols-1 sm:grid-cols-3 gap-stack_md"></div>
+
+    <div id="attack-unavailable" class="hidden bg-surface-container-lowest border border-outline-variant rounded-lg p-stack_md text-body-md text-on-surface-variant"></div>
+
+    <div id="attack-matrix" class="space-y-stack_md"></div>
+  </section>
+
 </div>
 </main>
 
@@ -670,6 +688,10 @@ tailwind.config = {
         <div class="flex justify-between gap-4">
           <dt id="alert-info-method-label" class="text-on-surface-variant font-label">Aptikimo metodas</dt>
           <dd id="alert-info-method" class="text-right"></dd>
+        </div>
+        <div id="alert-info-attack-row" class="hidden flex justify-between gap-4">
+          <dt id="alert-info-attack-label" class="text-on-surface-variant font-label">ATT&CK technikos</dt>
+          <dd id="alert-info-attack" class="text-right flex flex-wrap gap-1 justify-end"></dd>
         </div>
       </dl>
 

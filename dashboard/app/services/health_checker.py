@@ -11,12 +11,15 @@ import os
 import time
 
 
+from app.log_selectors import LOG_JOBS, logs_selector
 from app.models.schemas import HealthStatus, ServiceHealth
 from app.services.loki_client import AsyncLokiClient
 
 logger = logging.getLogger(__name__)
 
 ANOMALY_DB_PATH = os.getenv("ANOMALY_DB_PATH", "/data/anomaly_history.json")
+# Alloy būklės (readiness) endpoint'as — pakeitė Promtail.
+ALLOY_READY_URL = os.getenv("ALLOY_READY_URL", "http://alloy:12345/-/ready")
 _CACHE_TTL = 30.0  # sekundės
 
 
@@ -60,7 +63,7 @@ class HealthChecker:
             message="Veikia normaliai" if loki_ready else "Nepasiekiama",
         ))
 
-        # --- syslog-ng + Promtail: per duomenų šviežumą ---
+        # --- syslog-ng: per duomenų šviežumą ---
         # Jei Loki neveikia, negalime nieko spręsti apie šaltinius — žymime kaip nežinoma.
         if loki_ready:
             syslog_status, syslog_msg = await self._check_data_freshness()
@@ -73,12 +76,26 @@ class HealthChecker:
             status=syslog_status,
             message=syslog_msg,
         ))
+
+        # --- Alloy: per readiness endpoint'ą (tiesiogiai, nepriklauso nuo Loki) ---
+        alloy_status, alloy_msg = await self._check_alloy_ready()
         services.append(ServiceHealth(
-            name="promtail",
-            label="Žurnalų persiuntimas (Promtail)",
-            status=syslog_status,
-            message=syslog_msg,
+            name="alloy",
+            label="Žurnalų persiuntimas (Alloy)",
+            status=alloy_status,
+            message=alloy_msg,
         ))
+
+        # --- Galinių įrenginių telemetrija (Windows) — tik jei yra bent vienas ---
+        if "windows" in LOG_JOBS and loki_ready:
+            ep_status, ep_msg = await self._check_endpoint_telemetry()
+            if ep_status is not None:
+                services.append(ServiceHealth(
+                    name="endpoints",
+                    label="Galinių įrenginių telemetrija",
+                    status=ep_status,
+                    message=ep_msg,
+                ))
 
         # --- Anomaly detector: per failo modifikacijos laiką ---
         detector_status, detector_msg = self._check_detector_health()
@@ -107,21 +124,47 @@ class HealthChecker:
     async def _check_data_freshness(self) -> tuple[str, str]:
         """
         Tikrina ar paskutinis logas Loki yra ne senesnis nei 5 minutės.
-        Netiesiogiai parodo, ar syslog-ng ir Promtail veikia.
+        Netiesiogiai parodo, ar syslog-ng ir Alloy veikia.
         """
         now = datetime.datetime.now(datetime.timezone.utc)
         start = now - datetime.timedelta(minutes=5)
 
-        lines = await self._loki.query_range('{job="syslog"}', start=start, end=now, limit=1)
+        lines = await self._loki.query_range(logs_selector(), start=start, end=now, limit=1)
         if lines:
             return "ok", "Žurnalai gaunami reguliariai"
 
         # Patikriname ar apskritai yra duomenų (galbūt tiesiog tylu)
         start_1h = now - datetime.timedelta(hours=1)
-        lines_1h = await self._loki.query_range('{job="syslog"}', start=start_1h, end=now, limit=1)
+        lines_1h = await self._loki.query_range(logs_selector(), start=start_1h, end=now, limit=1)
         if lines_1h:
             return "warning", "Žurnalų negauta per paskutines 5 min"
         return "warning", "Nėra žurnalų per paskutinę valandą"
+
+    async def _check_endpoint_telemetry(self) -> tuple[str | None, str]:
+        """
+        Windows endpoint telemetrijos šviežumas. Grąžina (None, "") jei endpoint'ų
+        iš viso nėra (nerodome paslaugos vartotojams be galinių įrenginių).
+        """
+        now = datetime.datetime.now(datetime.timezone.utc)
+        recent = await self._loki.query_range(
+            '{job="windows"}', start=now - datetime.timedelta(minutes=5), end=now, limit=1)
+        if recent:
+            return "ok", "Galiniai įrenginiai siunčia telemetriją"
+        hour = await self._loki.query_range(
+            '{job="windows"}', start=now - datetime.timedelta(hours=1), end=now, limit=1)
+        if hour:
+            return "warning", "Telemetrijos negauta per paskutines 5 min"
+        return None, ""  # endpoint'ų nėra — paslaugos nerodome
+
+    async def _check_alloy_ready(self) -> tuple[str, str]:
+        """Tikrina Alloy /-/ready endpoint'ą tiesiogiai (nepriklauso nuo Loki)."""
+        try:
+            resp = await self._loki._client.get(ALLOY_READY_URL, timeout=5)
+            if resp.status_code == 200:
+                return "ok", "Veikia normaliai"
+            return "warning", f"Netikėtas atsakymas ({resp.status_code})"
+        except Exception:  # noqa: BLE001 — tinklo klaida = nepasiekiamas
+            return "critical", "Nepasiekiamas"
 
     def _check_detector_health(self) -> tuple[str, str]:
         """
