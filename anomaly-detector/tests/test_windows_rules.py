@@ -165,6 +165,17 @@ def test_discovery_burst_below_threshold_silent():
 
 # -- Katalogas ---------------------------------------------------------------
 
+def test_query_fetches_only_rule_event_ids():
+    class RecordingLoki(FakeLoki):
+        def query_range(self, query, start=None, end=None, limit=5000):
+            self.query = query
+            return super().query_range(query, start, end, limit)
+
+    loki = RecordingLoki([])
+    WindowsRuleDetector(loki).check(now=T0)
+    assert loki.query.endswith('| json event_id="event_id" | event_id=~"1|3|11|1102|4104|4625|4720|4732|4740"')
+
+
 def test_every_windows_alert_type_in_catalog():
     win_types = ["win_failed_logon_bruteforce", "win_password_spray", "win_account_lockout",
                  "win_account_created", "win_admin_group_add", "win_audit_log_cleared",
