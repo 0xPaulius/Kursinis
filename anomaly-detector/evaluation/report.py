@@ -15,10 +15,10 @@ def _fmt(value: float) -> str:
     return f"{value:.3f}"
 
 
-def layers_table(metrics: dict, caption: str, label: str) -> str:
+def layers_table(metrics: dict, caption: str, label: str, key: str = "layers") -> str:
     rows = []
-    for key, name in _LAYER_NAMES.items():
-        m = metrics["layers"][key]
+    for layer, name in _LAYER_NAMES.items():
+        m = metrics[key][layer]
         lo, hi = m["f1_ci95"]
         rows.append(
             f"{name} & {_fmt(m['precision'])} & {_fmt(m['recall'])} & {_fmt(m['f1'])} "
@@ -71,16 +71,18 @@ def technique_table(metrics: dict, caption: str, label: str) -> str:
     """RQ2: ATT&CK technikų aptikimas (tik rinkiniams su technikomis)."""
     tr = metrics.get("technique_recall", {})
     rows = [
-        f"{r['technique']} & {r['intervals']} & {'taip' if r['detected'] else '--'} "
+        f"{r['technique']} & {'taip' if r.get('has_rule') else '--'} "
+        f"& {r.get('detected_mapped', 0)}/{r['intervals']} "
         f"& {', '.join(a.replace('_', r'\_') for a in r['alert_types']) or '--'} \\\\"
         for r in tr.get("techniques", [])
     ]
-    header = (rf"\multicolumn{{4}}{{l}}{{Aptikta {tr.get('detected', 0)}/{tr.get('total', 0)} "
-              rf"technikų}} \\" + "\n" + r"\midrule")
+    header = (rf"\multicolumn{{4}}{{l}}{{Aptikta atitinkama taisykle {tr.get('detected_mapped', 0)}"
+              rf"/{tr.get('total', 0)} technikų (taisyklė yra {tr.get('with_rule', 0)})}} \\"
+              + "\n" + r"\midrule")
     return "\n".join([
         r"\begin{table}[H]", r"\centering", rf"\caption{{{caption}}}", rf"\label{{{label}}}",
         r"\begin{tabular}{llll}", r"\toprule",
-        r"Technika & Intervalai & Aptikta & Alert tipai \\", r"\midrule", header,
+        r"Technika & Taisyklė & Aptikta (intervalai) & Visi alert tipai \\", r"\midrule", header,
         *rows, r"\bottomrule", r"\end{tabular}", r"\end{table}",
     ])
 
@@ -126,6 +128,13 @@ def write_report(metrics_path: Path, ticks_path: Path, meta_path: Path, out_dir:
     sections = [
         layers_table(metrics, f"Aptikimo sluoksnių tikslumas ({name.replace('_', r'\_')})",
                      f"tab:eval-{safe}"),
+    ]
+    if "layers_windowed" in metrics:
+        sections.append(layers_table(
+            metrics, f"Aptikimo sluoksnių tikslumas nepersidengiančiuose "
+                     f"{metrics['window_minutes']} min languose ({name.replace('_', r'\_')})",
+            f"tab:eval-windowed-{safe}", key="layers_windowed"))
+    sections += [
         attacks_table(metrics, f"Atakų fazių aptikimo vėlinimas ({name.replace('_', r'\_')})",
                       f"tab:eval-attacks-{safe}"),
     ]

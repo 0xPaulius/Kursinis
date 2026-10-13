@@ -24,10 +24,13 @@ def git_sha() -> str:
     if os.getenv("GIT_SHA"):
         return os.environ["GIT_SHA"]
     try:
-        return subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], text=True,
-                                       stderr=subprocess.DEVNULL).strip()
+        sha = subprocess.check_output(["git", "rev-parse", "--short", "HEAD"], text=True,
+                                      stderr=subprocess.DEVNULL).strip()
     except (OSError, subprocess.CalledProcessError):
         return "unknown"
+    dirty = subprocess.run(["git", "diff", "--quiet", "HEAD"],
+                           stderr=subprocess.DEVNULL).returncode == 1
+    return f"{sha}-dirty" if dirty else sha
 
 
 def run(meta_path: Path, loki_url: str, run_dir: Path, step_seconds: int = 60,
@@ -78,6 +81,9 @@ def run(meta_path: Path, loki_url: str, run_dir: Path, step_seconds: int = 60,
             "ALERT_COOLDOWN_SECONDS": common.ALERT_COOLDOWN_SECONDS,
             "BASELINE_WINDOW_HOURS": getattr(common, "BASELINE_WINDOW_HOURS", None),
             "ML_TRAINING_MODE": getattr(common, "ML_TRAINING_MODE", None),
+            "ML_MAX_TRAINING_SAMPLES": common.ML_MAX_TRAINING_SAMPLES,
+            "ENABLE_WINDOWS_RULES": common.ENABLE_WINDOWS_RULES,
+            "ENABLE_LINUX_RULES": common.ENABLE_LINUX_RULES,
         },
         "git_sha": git_sha(),
         "duration_seconds": round(time.time() - started, 1),
