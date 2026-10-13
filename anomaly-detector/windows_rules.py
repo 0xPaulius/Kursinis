@@ -149,6 +149,11 @@ _PER_EVENT_RULES = [
     PerEventRule({3}, "win_lolbin_network", "medium", _rule_lolbin_network, key_as="ip"),
 ]
 
+# Užklausa grąžina tik taisyklių event ID (1 ir 4625 — agregacijos taisyklės): tankus Sysmon
+# srautas kitaip viršija query_range 5000 eilučių ribą ir dalis įvykių taisyklių nepasiekia.
+RULE_EVENT_IDS = sorted({eid for rule in _PER_EVENT_RULES for eid in rule.event_ids} | {1, 4625})
+_EVENT_ID_FILTER = f'| json event_id="event_id" | event_id=~"{"|".join(map(str, RULE_EVENT_IDS))}"'
+
 # Agregacijos slenksčiai
 FAILED_LOGON_THRESHOLD = 5     # 4625 iš to paties IP
 SPRAY_DISTINCT_USERS = 5       # 4625: skirtingi vartotojai iš to paties IP
@@ -179,7 +184,7 @@ class WindowsRuleDetector:
     def check(self, window_minutes: int = 5, now: Optional[datetime.datetime] = None) -> list[Alert]:
         now = now or utcnow()
         start = now - datetime.timedelta(minutes=window_minutes)
-        lines = self.loki.query_range(self.sel.windows, start=start, end=now)
+        lines = self.loki.query_range(f"{self.sel.windows} {_EVENT_ID_FILTER}", start=start, end=now)
         events = [ev for ev in (parse_event(e["line"]) for e in lines) if ev]
         if not events:
             return []
