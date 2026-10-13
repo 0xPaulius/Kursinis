@@ -16,6 +16,7 @@ import logging
 import os
 import re
 
+from app.log_selectors import logs_selector
 from app.services.alert_reader import AlertReader
 from app.services.device_registry import DEFAULT_OS_VERSION, DeviceRegistry
 from app.services.host_info import HostInfo
@@ -64,11 +65,11 @@ class DeviceMonitor:
 
         # Kiekiai per metric užklausas (neribojama 5000 eilučių riba)
         m5 = await self._loki.query_metric(
-            'sum by (host)(count_over_time({job="syslog"}[5m]))',
+            f'sum by (host)(count_over_time({logs_selector()}[5m]))',
             start=now - datetime.timedelta(minutes=5), end=now, step="5m",
         )
         m1h = await self._loki.query_metric(
-            'sum by (host)(count_over_time({job="syslog"}[1h]))',
+            f'sum by (host)(count_over_time({logs_selector()}[1h]))',
             start=now - datetime.timedelta(hours=1), end=now, step="1h",
         )
         for series in m5:
@@ -82,7 +83,7 @@ class DeviceMonitor:
 
         # Paskutinio logo laikas — iš naujausių eilučių per 1 val
         recent = await self._loki.query_range(
-            '{job="syslog"}', start=now - datetime.timedelta(hours=1), end=now, limit=5000,
+            logs_selector(), start=now - datetime.timedelta(hours=1), end=now, limit=5000,
         )
         for entry in recent:
             host = entry.get("labels", {}).get("host")

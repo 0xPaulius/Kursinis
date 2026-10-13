@@ -185,8 +185,13 @@ class DeviceRegistry:
     def get(self, device_id: str) -> dict | None:
         return next((d for d in self._devices if d["id"] == device_id), None)
 
-    def add(self, name: str, ip: str, os_type: str, os_version: str | None = None) -> dict:
-        """Sukuria ir išsaugo naują įrenginį. Kelia ValueError, jei duomenys netinkami."""
+    def add(self, name: str, ip: str, os_type: str, os_version: str | None = None,
+            synthetic: bool = True) -> dict:
+        """
+        Sukuria ir išsaugo naują įrenginį. Kelia ValueError, jei duomenys netinkami.
+        synthetic=True — demonstracinis įrenginys (automatiškai generuoja normalų srautą);
+        synthetic=False — realus įrenginys (siunčia savo tikrus logus, srautas negeneruojamas).
+        """
         name = (name or "").strip()
         if not name:
             raise ValueError("Pavadinimas privalomas")
@@ -205,7 +210,7 @@ class DeviceRegistry:
             "ip": ip,
             "os": os_type,
             "os_version": os_version,
-            "synthetic": True,
+            "synthetic": synthetic,
             "enabled": True,
             "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         }

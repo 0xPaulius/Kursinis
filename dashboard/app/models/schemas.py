@@ -36,6 +36,7 @@ class AlertItem(BaseModel):
     detection_method: str
     details: dict[str, Any]
     sample_lines: list[str] = []   # raw log lines that triggered this alert
+    attack_techniques: list[str] = []   # MITRE ATT&CK technique IDs (e.g. T1110.001)
 
 
 class AlertList(BaseModel):

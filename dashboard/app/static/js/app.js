@@ -133,19 +133,20 @@ const I18N = {
     tut_macos_steps: [
       "Savo „MacBook“ atidarykite programą „Terminal“.",
       "Įdiekite syslog-ng (per Homebrew): brew install syslog-ng",
-      "Į konfigūraciją įrašykite paskirties bloką (pavyzdys žemiau), nurodydami {collector}.",
+      "Iš administratoriaus gaukite CA sertifikatą (ca.crt) ir įdėkite į /usr/local/etc/kursinis-ca.crt.",
+      "Į konfigūraciją įrašykite paskirties bloką (pavyzdys žemiau) — siunčiama šifruotai per TLS (6514) į {collector}.",
       "Paleiskite paslaugą: sudo brew services start syslog-ng",
       "Po kelių minučių įrenginys pasirodys sraute.",
     ],
     tut_windows_steps: [
-      "Atsisiųskite ir įdiekite „nxlog Community Edition“.",
-      "Į nxlog.conf įrašykite išvesties bloką (pavyzdys žemiau), nurodydami {collector}.",
-      "Maršrute (Route) priskirkite šią išvestį ir nustatykite siuntėjo vardą {hostname}.",
-      "Paleiskite „nxlog“ tarnybą per „Services“ valdiklį.",
-      "Po kelių minučių įrenginys pasirodys sraute.",
+      "Atsisiųskite „Grafana Alloy“ (Windows) ir įdiekite tyliai: alloy-installer-windows-amd64.exe /S.",
+      "Iš administratoriaus gaukite sertifikatus (ca.crt, client.crt, client.key) ir įdėkite į C:\\kursinis-certs.",
+      "Į C:\\Program Files\\GrafanaLabs\\Alloy\\config.alloy įrašykite konfigūraciją (pavyzdys žemiau), nurodydami {collector}.",
+      "Perkraukite „Alloy“ tarnybą: Restart-Service Alloy.",
+      "Po kelių minučių įrenginys pasirodys sraute (Security, Sysmon ir PowerShell įvykiai).",
     ],
-    tut_macos_code: "destination d_collector {\n  network(\"{collector}\" transport(\"udp\") port(514));\n};\nlog { source(s_local); destination(d_collector); };",
-    tut_windows_code: "<Output collector>\n  Module  om_udp\n  Host    {collector}\n  Port    514\n</Output>",
+    tut_macos_code: "# /usr/local/etc/syslog-ng.conf\ndestination d_collector {\n  network(\"{collector}\" transport(\"tls\") port(6514)\n    tls(ca-file(\"/usr/local/etc/kursinis-ca.crt\") peer-verify(required-trusted)));\n};\nlog { source(s_local); destination(d_collector); };",
+    tut_windows_code: "// config.alloy — Security, Sysmon, PowerShell -> kolektorius (mTLS)\nloki.source.windowsevent \"security\" {\n  eventlog_name = \"Security\"\n  forward_to    = [loki.process.win.receiver]\n}\nloki.process \"win\" {\n  forward_to = [loki.write.c.receiver]\n  stage.static_labels { values = { job = \"windows\" } }\n}\nloki.write \"c\" {\n  endpoint {\n    url = \"https://{collector}:3500/loki/api/v1/push\"\n    tls_config {\n      ca_file   = \"C:\\\\kursinis-certs\\\\ca.crt\"\n      cert_file = \"C:\\\\kursinis-certs\\\\client.crt\"\n      key_file  = \"C:\\\\kursinis-certs\\\\client.key\"\n    }\n  }\n}",
     messages_page:        "Pranešimų nustatymai",
     messages_desc:        "Siųskite naujus įspėjimus į webhook kanalą (Slack, Discord, Telegram ir kt.).",
     notify_enabled_label: "Įjungti pranešimus",
@@ -164,7 +165,18 @@ const I18N = {
     nav_dashboard:      "Apžvalga",
     nav_anomalies:      "Anomalijos",
     nav_devices:        "Įrenginiai",
+    nav_attack:         "ATT&CK aprėptis",
     nav_messages:       "Pranešimai",
+    attack_page_title:  "MITRE ATT&CK aprėptis",
+    attack_desc:        "Kurias atakų technikas sistema geba aptikti ir kurios realiai suveikė žurnaluose.",
+    attack_total:       "Technikų rinkinyje",
+    attack_with_rule:   "Padengta taisyklėmis",
+    attack_detected:    "Aptikta žurnaluose",
+    attack_has_rule:    "Yra taisyklė",
+    attack_no_rule:     "Nėra taisyklės",
+    attack_detected_badge: "Aptikta",
+    attack_unavailable: "ATT&CK katalogas dar neprieinamas. Paleiskite anomalijų detektorių (profilis „anomaly“).",
+    alert_techniques:   "ATT&CK technikos",
     lang_switch:        "EN",
     search_placeholder: "Ieškoti įvykių ar įrenginių...",
     just_now:           "ką tik",
@@ -357,19 +369,20 @@ const I18N = {
     tut_macos_steps: [
       "On your MacBook, open the \"Terminal\" app.",
       "Install syslog-ng (via Homebrew): brew install syslog-ng",
-      "Add a destination block to the config (example below), pointing at {collector}.",
+      "Get the CA certificate (ca.crt) from your admin and place it at /usr/local/etc/kursinis-ca.crt.",
+      "Add a destination block to the config (example below) — sent encrypted over TLS (6514) to {collector}.",
       "Start the service: sudo brew services start syslog-ng",
       "Within a few minutes the device will appear in the traffic.",
     ],
     tut_windows_steps: [
-      "Download and install \"nxlog Community Edition\".",
-      "Add an output block to nxlog.conf (example below), pointing at {collector}.",
-      "Assign the output in a Route and set the sender name to {hostname}.",
-      "Start the \"nxlog\" service from the Services manager.",
-      "Within a few minutes the device will appear in the traffic.",
+      "Download \"Grafana Alloy\" (Windows) and install silently: alloy-installer-windows-amd64.exe /S.",
+      "Get the certificates (ca.crt, client.crt, client.key) from your admin and place them in C:\\kursinis-certs.",
+      "Write the configuration (example below) to C:\\Program Files\\GrafanaLabs\\Alloy\\config.alloy, pointing at {collector}.",
+      "Restart the Alloy service: Restart-Service Alloy.",
+      "Within a few minutes the device will appear in the traffic (Security, Sysmon and PowerShell events).",
     ],
-    tut_macos_code: "destination d_collector {\n  network(\"{collector}\" transport(\"udp\") port(514));\n};\nlog { source(s_local); destination(d_collector); };",
-    tut_windows_code: "<Output collector>\n  Module  om_udp\n  Host    {collector}\n  Port    514\n</Output>",
+    tut_macos_code: "# /usr/local/etc/syslog-ng.conf\ndestination d_collector {\n  network(\"{collector}\" transport(\"tls\") port(6514)\n    tls(ca-file(\"/usr/local/etc/kursinis-ca.crt\") peer-verify(required-trusted)));\n};\nlog { source(s_local); destination(d_collector); };",
+    tut_windows_code: "// config.alloy — Security, Sysmon, PowerShell -> collector (mTLS)\nloki.source.windowsevent \"security\" {\n  eventlog_name = \"Security\"\n  forward_to    = [loki.process.win.receiver]\n}\nloki.process \"win\" {\n  forward_to = [loki.write.c.receiver]\n  stage.static_labels { values = { job = \"windows\" } }\n}\nloki.write \"c\" {\n  endpoint {\n    url = \"https://{collector}:3500/loki/api/v1/push\"\n    tls_config {\n      ca_file   = \"C:\\\\kursinis-certs\\\\ca.crt\"\n      cert_file = \"C:\\\\kursinis-certs\\\\client.crt\"\n      key_file  = \"C:\\\\kursinis-certs\\\\client.key\"\n    }\n  }\n}",
     messages_page:        "Notification Settings",
     messages_desc:        "Send new alerts to a webhook channel (Slack, Discord, Telegram, etc.).",
     notify_enabled_label: "Enable notifications",
@@ -388,7 +401,18 @@ const I18N = {
     nav_dashboard:      "Dashboard",
     nav_anomalies:      "Anomalies",
     nav_devices:        "Devices",
+    nav_attack:         "ATT&CK coverage",
     nav_messages:       "Notifications",
+    attack_page_title:  "MITRE ATT&CK coverage",
+    attack_desc:        "Which attack techniques the system can detect and which actually fired in the logs.",
+    attack_total:       "In technique set",
+    attack_with_rule:   "Covered by rules",
+    attack_detected:    "Seen in logs",
+    attack_has_rule:    "Has rule",
+    attack_no_rule:     "No rule",
+    attack_detected_badge: "Detected",
+    attack_unavailable: "ATT&CK catalog not available yet. Start the anomaly detector (profile \"anomaly\").",
+    alert_techniques:   "ATT&CK techniques",
     lang_switch:        "LT",
     search_placeholder: "Search events or devices...",
     just_now:           "just now",
@@ -661,7 +685,7 @@ function navigate(page) {
   const target = el("page-" + page);
   if (target) target.classList.add("active");
 
-  ["dashboard", "anomalies", "devices", "messages"].forEach(p => {
+  ["dashboard", "anomalies", "devices", "attack", "messages"].forEach(p => {
     const btn = el("nav-" + p);
     if (btn) btn.classList.toggle("active", p === page);
   });
@@ -669,6 +693,7 @@ function navigate(page) {
   state.page = page;
   if (page === "anomalies") { renderAnomaliesPage(); loadRawLogs(); }
   if (page === "devices")   renderDevicesPage();
+  if (page === "attack")    loadAttackCoverage();
   if (page === "messages")  loadNotificationSettings();
 }
 
@@ -806,7 +831,7 @@ function setRange(hours) {
 
 function errorCount() {
   if (!state.current) return 0;
-  // Promtail iš syslog-ng išgauna tik standartines syslog severity etiketes:
+  // Alloy iš syslog-ng išgauna tik standartines syslog severity etiketes:
   // emerg, alert, crit, err, warning, notice, info, debug. Skaičiuojame klaidų lygius.
   const s = state.current.by_severity || {};
   return (s.emerg || 0) + (s.alert || 0) + (s.crit || 0) + (s.err || 0);
@@ -1008,6 +1033,102 @@ async function toggleShowAllAlerts() {
   state.showAllAlerts = !state.showAllAlerts;
   if (state.showAllAlerts) await loadAllAlerts();
   renderAnomaliesPage();
+}
+
+// ---------------------------------------------------------------------------
+// ATT&CK aprėptis
+// ---------------------------------------------------------------------------
+async function loadAttackCoverage() {
+  try {
+    state.attackCoverage = await fetchJSON("/api/attack/coverage");
+  } catch (e) {
+    console.error("ATT&CK:", e);
+    state.attackCoverage = null;
+  }
+  renderAttackCoverage();
+}
+
+function _attackCard(label, value, valueCls) {
+  const card = document.createElement("div");
+  card.className = "bg-surface-container-lowest border border-outline-variant rounded-lg p-stack_md";
+  const v = document.createElement("div");
+  v.className = "text-display-sm font-headline " + valueCls;
+  v.textContent = value;
+  const l = document.createElement("div");
+  l.className = "text-label-md font-label text-on-surface-variant mt-1";
+  l.textContent = label;
+  card.appendChild(v);
+  card.appendChild(l);
+  return card;
+}
+
+function _attackCell(row) {
+  const cell = document.createElement("div");
+  const style = row.detected
+    ? "bg-secondary-container border-secondary text-on-secondary-container"
+    : row.has_rule
+      ? "bg-surface-container-high border-outline-variant text-on-surface"
+      : "bg-surface-container-lowest border-dashed border-outline-variant text-on-surface-variant";
+  cell.className = "border rounded-lg p-3 text-left " + style;
+
+  const head = document.createElement("div");
+  head.className = "flex items-center justify-between gap-2";
+  const id = document.createElement("span");
+  id.className = "font-data-mono text-label-md";
+  id.textContent = row.technique;
+  const badge = document.createElement("span");
+  if (row.detected) {
+    badge.className = "text-label-sm font-label px-1.5 py-0.5 rounded bg-secondary text-on-secondary";
+    badge.textContent = t("attack_detected_badge");
+  } else {
+    badge.className = "text-label-sm font-label text-on-surface-variant";
+    badge.textContent = row.has_rule ? t("attack_has_rule") : t("attack_no_rule");
+  }
+  head.appendChild(id);
+  head.appendChild(badge);
+
+  const name = document.createElement("div");
+  name.className = "text-body-sm mt-1 leading-snug";
+  name.textContent = row.name;
+
+  cell.appendChild(head);
+  cell.appendChild(name);
+  return cell;
+}
+
+function renderAttackCoverage() {
+  const data = state.attackCoverage;
+  const matrix = el("attack-matrix");
+  const summary = el("attack-summary");
+  const unavailable = el("attack-unavailable");
+  if (!matrix || !summary || !unavailable) return;
+
+  matrix.textContent = "";
+  summary.textContent = "";
+
+  if (!data || !data.available) {
+    unavailable.classList.remove("hidden");
+    unavailable.textContent = t("attack_unavailable");
+    return;
+  }
+  unavailable.classList.add("hidden");
+
+  summary.appendChild(_attackCard(t("attack_total"), String(data.total), "text-on-surface"));
+  summary.appendChild(_attackCard(t("attack_with_rule"), `${data.with_rule} / ${data.total}`, "text-primary"));
+  summary.appendChild(_attackCard(t("attack_detected"), `${data.detected} / ${data.total}`, "text-secondary"));
+
+  Object.keys(data.by_tactic).sort().forEach(tactic => {
+    const group = document.createElement("div");
+    const h = document.createElement("h3");
+    h.className = "text-title-md font-headline text-on-surface mb-2";
+    h.textContent = tactic;
+    const grid = document.createElement("div");
+    grid.className = "grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-stack_sm";
+    data.by_tactic[tactic].forEach(row => grid.appendChild(_attackCell(row)));
+    group.appendChild(h);
+    group.appendChild(grid);
+    matrix.appendChild(group);
+  });
 }
 
 function renderKeyEvents() {
@@ -1446,6 +1567,26 @@ function openAlertInfo(a) {
   setAlertRow("alert-info-ip-row", "alert-info-ip", a.source_ip);
   setAlertRow("alert-info-host-row", "alert-info-host", a.source_host);
   setText("alert-info-method", methodLabel(a.detection_method));
+
+  // ATT&CK technikos (jei yra) — ženkliukai
+  const techs = Array.isArray(a.attack_techniques) ? a.attack_techniques : [];
+  const techRow = el("alert-info-attack-row");
+  const techWrap = el("alert-info-attack");
+  setText("alert-info-attack-label", t("alert_techniques"));
+  if (techRow && techWrap) {
+    techWrap.textContent = "";
+    if (techs.length) {
+      techRow.classList.remove("hidden");
+      techs.forEach(tid => {
+        const chip = document.createElement("span");
+        chip.className = "font-data-mono text-label-sm px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface";
+        chip.textContent = tid;
+        techWrap.appendChild(chip);
+      });
+    } else {
+      techRow.classList.add("hidden");
+    }
+  }
 
   setText("alert-info-expl", alertExpl(a.alert_type) || a.explanation || "");
 
@@ -2050,7 +2191,11 @@ function applyI18n() {
   setText("nav-label-dashboard",    t("nav_dashboard"));
   setText("nav-label-anomalies",    t("nav_anomalies"));
   setText("nav-label-devices",      t("nav_devices"));
+  setText("nav-label-attack",       t("nav_attack"));
   setText("nav-label-messages",     t("nav_messages"));
+  setText("attack-page-title",      t("attack_page_title"));
+  setText("attack-desc",            t("attack_desc"));
+  if (state.page === "attack") renderAttackCoverage();
   setText("lang-btn",               t("lang_switch"));
   setPlaceholder("search-input",    t("search_placeholder"));
   setText("hero-label",             t("hero_label"));
