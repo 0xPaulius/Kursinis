@@ -4,12 +4,19 @@ Vertinimo duomenų rinkinių atsisiuntimas.
 AIT-LDS v2.0: iš ~7–27 GB scenarijaus ZIP per HTTP Range ištraukiami tik reikalingi
 nariai (dataset.yaml, žymės, atakų tvarkaraštis, auth/syslog/apache žurnalai).
 Kiekvienas narys tikrinamas CRC32, o ištrauktiems failams įrašomas sha256 manifestas.
+
+OTRF Security Datasets: manifests/otrf_windows_host.csv išvardyti Windows host rinkiniai
+(technikos iš OTRF metaduomenų, žr. tools/build_otrf_manifest.py) iš fiksuotos revizijos.
 """
 from __future__ import annotations
 
+import csv
 import hashlib
 import json
+import shutil
 from pathlib import Path
+
+import requests
 
 from .remote_zip import RemoteZip
 
@@ -24,6 +31,11 @@ AIT_MEMBERS = [
     "gather/*/logs/syslog*",
     "gather/*/logs/apache2/*access.log*",
 ]
+OTRF_COMMIT = "d9d40ef123d2c87d5d3df28c96bcab4f0faccc87"
+OTRF_URL = ("https://raw.githubusercontent.com/OTRF/Security-Datasets/"
+            "{commit}/datasets/atomic/windows/{file}")
+OTRF_LICENSE = "OTRF Security Datasets — MIT License (Open Threat Research Forge)"
+OTRF_MANIFEST = Path(__file__).parent / "manifests" / "otrf_windows_host.csv"
 
 
 def sha256_file(path: Path) -> str:
@@ -74,4 +86,31 @@ def fetch_ait(scenario: str, dest: Path, members: list[str] | None = None) -> Pa
         "members": members or AIT_MEMBERS,
     }, indent=2))
     print(f"Licencija: {AIT_LICENSE}")
+    return target
+
+
+def fetch_otrf(dest: Path) -> Path:
+    """OTRF Windows host rinkiniai pagal manifestą; manifest.csv nukopijuojamas šalia jų."""
+    target = Path(dest)
+    with open(OTRF_MANIFEST, newline="") as fh:
+        files = [row["file"] for row in csv.DictReader(fh)]
+    for name in files:
+        out = target / name
+        if out.is_file():
+            continue
+        out.parent.mkdir(parents=True, exist_ok=True)
+        resp = requests.get(OTRF_URL.format(commit=OTRF_COMMIT, file=name), timeout=120)
+        resp.raise_for_status()
+        part = out.with_name(out.name + ".part")
+        part.write_bytes(resp.content)
+        part.replace(out)
+    shutil.copy(OTRF_MANIFEST, target / "manifest.csv")
+    (target / "SOURCE.json").write_text(json.dumps({
+        "url": OTRF_URL.format(commit=OTRF_COMMIT, file="<file>"),
+        "commit": OTRF_COMMIT,
+        "license": OTRF_LICENSE,
+        "files": len(files),
+    }, indent=2))
+    write_manifest(target)
+    print(f"OTRF: {len(files)} rinkiniai -> {target}\nLicencija: {OTRF_LICENSE}")
     return target

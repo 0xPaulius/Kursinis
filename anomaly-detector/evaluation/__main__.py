@@ -2,7 +2,9 @@
 Vertinimo CLI.
 
   python -m evaluation fetch  ait --scenario russellmitchell
+  python -m evaluation fetch  otrf
   python -m evaluation ingest ait --scenario-dir /datasets/ait/russellmitchell --dataset ait-russellmitchell
+  python -m evaluation ingest otrf --scenario-dir /datasets/otrf --dataset otrf-windows
   python -m evaluation run    --dataset ait-russellmitchell --run-id baseline
   python -m evaluation score  --dataset ait-russellmitchell --run-id baseline
   python -m evaluation report --dataset ait-russellmitchell --run-id baseline
@@ -31,8 +33,14 @@ def _run_dir(args) -> Path:
 
 
 def cmd_fetch(args) -> None:
-    from .fetch import fetch_ait
-    fetch_ait(args.scenario, Path(args.dest))
+    from .fetch import fetch_ait, fetch_otrf
+    dest = Path(args.dest or Path(DEFAULT_DATASETS) / args.source)
+    if args.source == "otrf":
+        fetch_otrf(dest)
+    elif args.scenario:
+        fetch_ait(args.scenario, dest)
+    else:
+        sys.exit("fetch ait: reikia --scenario")
 
 
 def cmd_ingest(args) -> None:
@@ -89,14 +97,15 @@ def main(argv: list[str] | None = None) -> None:
     sub = parser.add_subparsers(dest="command", required=True)
 
     p = sub.add_parser("fetch")
-    p.add_argument("source", choices=["ait"])
-    p.add_argument("--scenario", required=True)
-    p.add_argument("--dest", default=str(Path(DEFAULT_DATASETS) / "ait"))
+    p.add_argument("source", choices=["ait", "otrf"])
+    p.add_argument("--scenario", help="AIT scenarijus")
+    p.add_argument("--dest", help="Numatyta: <datasets>/<source>")
     p.set_defaults(func=cmd_fetch)
 
     p = sub.add_parser("ingest")
     p.add_argument("adapter", choices=["ait", "evtx", "otrf"])
-    p.add_argument("--scenario-dir", required=True, help="AIT scenarijaus katalogas arba .evtx/.jsonl failas")
+    p.add_argument("--scenario-dir", required=True,
+                   help="AIT scenarijaus katalogas, .evtx/.json failas arba OTRF korpuso katalogas")
     p.add_argument("--dataset", required=True)
     p.add_argument("--sources", nargs="*", help="AIT failų šablonai (numatyta: auth, syslog, apache)")
     p.add_argument("--technique", help="ATT&CK ID Windows rinkiniams (jei nenustatyta iš kelio)")

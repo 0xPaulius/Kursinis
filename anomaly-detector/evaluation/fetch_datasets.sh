@@ -20,16 +20,19 @@ for scenario in "${scenarios[@]}"; do
 done
 
 # Windows ATT&CK rinkiniai (neprivaloma: WINDOWS=1). „Vien atakos" — per-technique recall,
-# ne FPR. Įkelti: python -m evaluation ingest evtx|otrf --scenario-dir <failas> --dataset <vardas>
+# ne FPR. OTRF korpusas (manifests/otrf_windows_host.csv, ~55 MB):
+#   python -m evaluation ingest otrf --scenario-dir /datasets/otrf --dataset otrf-windows
+# Pavieniai EVTX failai: python -m evaluation ingest evtx --scenario-dir <failas> --dataset <vardas>
 if [ "${WINDOWS:-0}" = "1" ]; then
+  docker compose --profile eval run --rm --no-deps evaluator fetch otrf
+  (cd datasets/otrf && sha256sum --quiet -c MANIFEST.sha256) && echo "otrf: MANIFEST.sha256 OK"
   git -C datasets clone --depth 1 https://github.com/sbousseaden/EVTX-ATTACK-SAMPLES.git 2>/dev/null \
     || git -C datasets/EVTX-ATTACK-SAMPLES pull --ff-only
-  git -C datasets clone --depth 1 https://github.com/OTRF/Security-Datasets.git 2>/dev/null \
-    || git -C datasets/Security-Datasets pull --ff-only
 fi
 
 echo
 echo "Licencijos:"
 echo "  AIT-LDS v2.0 — CC BY-NC-SA 4.0: naudojimas tik nekomerciniais tikslais, su autorystės nuoroda"
 echo "  (M. Landauer et al., 'Maintainable Log Datasets for Evaluation of Intrusion Detection Systems', 2022)."
-echo "  EVTX-ATTACK-SAMPLES (sbousseaden) ir OTRF Security-Datasets — žr. jų LICENSE prieš naudojimą."
+echo "  OTRF Security-Datasets — MIT License (Open Threat Research Forge)."
+echo "  EVTX-ATTACK-SAMPLES (sbousseaden) — žr. jo LICENSE prieš naudojimą."

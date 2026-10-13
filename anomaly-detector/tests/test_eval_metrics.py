@@ -4,6 +4,7 @@ Vertinimo metrikų testai su sintetiniais ciklais.
 from __future__ import annotations
 
 import datetime
+import json
 
 import numpy as np
 
@@ -41,6 +42,26 @@ def test_mcnemar_counts_discordant_pairs():
     result = metrics.mcnemar(a, b, truth)
     assert result["a_only_correct"] == 1 and result["b_only_correct"] == 1
     assert result["p_value"] == 1.0
+
+
+def test_window_index_and_pool_merge_ticks_into_disjoint_windows():
+    ticks = [_tick(m, []) for m in range(12)]
+    idx = metrics.window_index(ticks, window_s=300)
+    assert list(idx) == [0] * 5 + [1] * 5 + [2] * 2
+    values = np.zeros(12, dtype=bool)
+    values[6] = True
+    assert list(metrics.pool(values, idx)) == [False, True, False]
+
+
+def test_score_mcnemar_counts_a_false_alarm_burst_once_per_window(tmp_path):
+    ticks = [_tick(m, ["ml"] if 20 <= m < 25 else []) for m in range(60)]
+    (tmp_path / "ticks.jsonl").write_text("\n".join(json.dumps(t) for t in ticks))
+    (tmp_path / "meta.json").write_text(json.dumps(
+        {"dataset": "t", "attack_event_times": [], "attack_intervals": []}))
+    result = metrics.score(tmp_path / "ticks.jsonl", tmp_path / "meta.json", bootstrap=10)
+    assert result["windows"] == 12
+    assert result["mcnemar_ml_vs_statistical"]["b_only_correct"] == 1
+    assert result["layers"]["ml"]["fp"] == 5 and result["layers_windowed"]["ml"]["fp"] == 1
 
 
 def test_per_attack_latency_per_layer():
