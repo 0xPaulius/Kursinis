@@ -11,3 +11,8 @@ venv/
 .lo-profile/
 scripts/
 LaTex/
+.tools/
+datasets/
+eval-results/
+certs/*
+!certs/.gitkeep

@@ -1,0 +1,8 @@
+# Vertinimo (evaluation) priklausomybės papildomai prie requirements.txt.
+# Užrakintas requirements-eval.txt generuojamas:
+#   uv pip compile requirements-eval.in -c requirements.txt -o requirements-eval.txt --universal --python-version 3.12
+-r requirements.in
+scipy>=1.11
+matplotlib>=3.8
+python-evtx>=0.8
+pytest>=8.0
