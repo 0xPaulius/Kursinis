@@ -9,14 +9,24 @@
 # Naudojimas / usage:
 #   sudo bash setup-host-syslog-ng.sh
 #   sudo COLLECTOR_HOST=192.168.1.10 COLLECTOR_PORT=514 bash setup-host-syslog-ng.sh
+#   sudo COLLECTOR_TLS=1 bash setup-host-syslog-ng.sh        # TLS 6514, CA iš ./certs/ca.crt
 # ---------------------------------------------------------------------------
 set -euo pipefail
 
 COLLECTOR_HOST="${COLLECTOR_HOST:-127.0.0.1}"   # 127.0.0.1 = kolektorius sukasi šiame host'e
-COLLECTOR_PORT="${COLLECTOR_PORT:-514}"
+COLLECTOR_TLS="${COLLECTOR_TLS:-0}"
 CONF="/etc/syslog-ng/syslog-ng.conf"
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TEMPLATE="${SCRIPT_DIR}/config/syslog-ng-host/syslog-ng.conf"
+COLLECTOR_CA="${COLLECTOR_CA:-${SCRIPT_DIR}/certs/ca.crt}"
+HOST_CA="/etc/syslog-ng/kursinis-ca.crt"
+if [[ "$COLLECTOR_TLS" == "1" ]]; then
+  COLLECTOR_PORT="${COLLECTOR_PORT:-6514}"
+  TRANSPORT="transport(\"tls\") tls(ca-file(\"${HOST_CA}\") peer-verify(required-trusted))"
+else
+  COLLECTOR_PORT="${COLLECTOR_PORT:-514}"
+  TRANSPORT='transport("tcp")'
+fi
 
 if [[ $EUID -ne 0 ]]; then
   echo "Paleiskite kaip root: sudo bash $0" >&2
@@ -43,9 +53,17 @@ if [[ -f "$CONF" && ! -f "${CONF}.kursinis.bak" ]]; then
 fi
 
 # 3. Įrašyti persiuntimo konfigūraciją (įstatomas kolektoriaus adresas)
-echo "[*] Rašoma $CONF  ->  ${COLLECTOR_HOST}:${COLLECTOR_PORT}/tcp"
+if [[ "$COLLECTOR_TLS" == "1" ]]; then
+  if [[ ! -f "$COLLECTOR_CA" ]]; then
+    echo "Nerastas CA sertifikatas: $COLLECTOR_CA (tools/gen-certs.sh ca)" >&2
+    exit 1
+  fi
+  install -m 0644 "$COLLECTOR_CA" "$HOST_CA"
+fi
+echo "[*] Rašoma $CONF  ->  ${COLLECTOR_HOST}:${COLLECTOR_PORT} ($([[ "$COLLECTOR_TLS" == "1" ]] && echo tls || echo tcp))"
 sed -e "s|\"127\.0\.0\.1\"|\"${COLLECTOR_HOST}\"|" \
     -e "s|port(514)|port(${COLLECTOR_PORT})|" \
+    -e "s|transport(\"tcp\")|${TRANSPORT}|" \
     "$TEMPLATE" > "$CONF"
 
 # 4. Sintaksės patikra prieš paleidžiant
