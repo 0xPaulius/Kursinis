@@ -100,6 +100,12 @@ docker compose --profile eval run --rm evaluator ingest ait \
     --scenario-dir /datasets/ait/russellmitchell --dataset ait-russellmitchell
 docker compose --profile eval run --rm evaluator run   --dataset ait-russellmitchell --run-id baseline
 docker compose --profile eval run --rm evaluator score --dataset ait-russellmitchell --run-id baseline
+
+# Windows ATT&CK korpusas (OTRF, 107 įrašai, ~55 MB): per-technique aptikimas (RQ2)
+WINDOWS=1 anomaly-detector/evaluation/fetch_datasets.sh
+docker compose --profile eval run --rm evaluator ingest otrf --scenario-dir /datasets/otrf --dataset otrf-windows
+docker compose --profile eval run --rm evaluator run   --dataset otrf-windows --run-id rules
+docker compose --profile eval run --rm evaluator score --dataset otrf-windows --run-id rules
 ```
 
 Rezultatai (precision/recall/F1/FPR, ATT&CK aprėptis, LaTeX lentelės) — `eval-results/`.
