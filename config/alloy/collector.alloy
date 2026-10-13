@@ -1,0 +1,131 @@
+////////////////////////////////////////////////////////////////////
+// Grafana Alloy kolektoriaus konfigūracija (pakeičia Promtail)
+// Skaito syslog-ng rašomus failus ir siunčia į Loki
+// Prideda labels (host, facility, severity, program) efektyviam filtravimui
+//
+// Sugeneruota: alloy convert --source-format=promtail config/promtail/promtail.yml
+// legacy_positions_file perima Promtail skaitymo pozicijas — po migracijos
+// failai neperskaitomi iš naujo (įrašai Loki nesidubliuoja).
+////////////////////////////////////////////////////////////////////
+
+// ---- Visi logai ----
+loki.process "all_logs" {
+	forward_to = [loki.write.default.receiver]
+
+	// syslog-ng šablono formatas:
+	// 2024-01-15T10:30:00+02:00 hostname facility.severity program[pid]: message
+	stage.regex {
+		expression = "^(?P<timestamp>\\S+)\\s+(?P<host>\\S+)\\s+(?P<facility>\\w+)\\.(?P<severity>\\w+)\\s+(?P<program>[^\\[]+)\\[(?P<pid>\\d*)\\]:\\s+(?P<message>.+)$"
+	}
+
+	stage.labels {
+		values = {
+			facility = null,
+			host     = null,
+			program  = null,
+			severity = null,
+		}
+	}
+
+	stage.timestamp {
+		source   = "timestamp"
+		format   = "2006-01-02T15:04:05-07:00"
+		location = "Europe/Vilnius"
+	}
+}
+
+loki.source.file "all_logs" {
+	targets = [{
+		__address__ = "localhost",
+		__path__    = "/var/log/syslog-ng/all.log",
+		job         = "syslog",
+	}]
+	forward_to = [loki.process.all_logs.receiver]
+
+	file_match {
+		enabled = true
+	}
+	legacy_positions_file = "/var/lib/promtail/positions.yaml"
+}
+
+// ---- Saugumo logai (atskiras srautas su label) ----
+loki.process "security_logs" {
+	forward_to = [loki.write.default.receiver]
+
+	stage.regex {
+		expression = "^(?P<timestamp>\\S+)\\s+(?P<host>\\S+)\\s+(?P<facility>\\w+)\\.(?P<severity>\\w+)\\s+(?P<program>[^\\[]+)\\[(?P<pid>\\d*)\\]:\\s+(?P<message>.+)$"
+	}
+
+	stage.labels {
+		values = {
+			facility = null,
+			host     = null,
+			program  = null,
+			severity = null,
+		}
+	}
+
+	stage.timestamp {
+		source   = "timestamp"
+		format   = "2006-01-02T15:04:05-07:00"
+		location = "Europe/Vilnius"
+	}
+}
+
+loki.source.file "security_logs" {
+	targets = [{
+		__address__ = "localhost",
+		__path__    = "/var/log/syslog-ng/security.log",
+		job         = "security",
+	}]
+	forward_to = [loki.process.security_logs.receiver]
+
+	file_match {
+		enabled = true
+	}
+	legacy_positions_file = "/var/lib/promtail/positions.yaml"
+}
+
+// ---- Klaidų logai ----
+loki.process "error_logs" {
+	forward_to = [loki.write.default.receiver]
+
+	stage.regex {
+		expression = "^(?P<timestamp>\\S+)\\s+(?P<host>\\S+)\\s+(?P<facility>\\w+)\\.(?P<severity>\\w+)\\s+(?P<program>[^\\[]+)\\[(?P<pid>\\d*)\\]:\\s+(?P<message>.+)$"
+	}
+
+	stage.labels {
+		values = {
+			host     = null,
+			program  = null,
+			severity = null,
+		}
+	}
+
+	stage.timestamp {
+		source   = "timestamp"
+		format   = "2006-01-02T15:04:05-07:00"
+		location = "Europe/Vilnius"
+	}
+}
+
+loki.source.file "error_logs" {
+	targets = [{
+		__address__ = "localhost",
+		__path__    = "/var/log/syslog-ng/errors.log",
+		job         = "errors",
+	}]
+	forward_to = [loki.process.error_logs.receiver]
+
+	file_match {
+		enabled = true
+	}
+	legacy_positions_file = "/var/lib/promtail/positions.yaml"
+}
+
+loki.write "default" {
+	endpoint {
+		url = "http://loki:3100/loki/api/v1/push"
+	}
+	external_labels = {}
+}
