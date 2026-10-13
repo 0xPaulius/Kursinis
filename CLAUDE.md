@@ -24,7 +24,7 @@ anomaly-detector/detector.py         — Engine.run_cycle(now): rule, statistica
 anomaly-detector/windows_rules.py    — Windows Event Log / Sysmon rules → ATT&CK
 anomaly-detector/linux_rules.py      — Linux auditd rules → ATT&CK
 anomaly-detector/attack_catalog.py   — alert_type → ATT&CK techniques, coverage, lab technique set
-anomaly-detector/evaluation/         — offline eval harness (fetch/ingest/run/score/report; AIT/OTRF/EVTX adapters)
+anomaly-detector/evaluation/         — offline eval harness (fetch/ingest/run/score/report; AIT/OTRF/EVTX adapters; manifests/)
 anomaly-detector/Dockerfile          — base + eval + runtime targets
 anomaly-detector/requirements.txt / requirements-eval.txt
 anomaly-detector/tests/              — pytest (rule, statistical, ML, engine, windows, linux, eval)
@@ -67,7 +67,7 @@ seed_demo.sh                         — loads demo_data into kursinis_anomaly-d
 
 ### Tests
 - `docker compose run --rm anomaly-detector pytest tests/ -v` — detector tests (requires `tests/` mounted or COPYed)
-- Detector: 91 pytest tests (rule, statistical, ML, engine, windows, linux, eval harness)
+- Detector: 99 pytest tests (rule, statistical, ML, engine, windows, linux, eval harness)
 - Dashboard: `dashboard/tests/` — 14 auth tests (UserStore scrypt, tokens, roles, throttling, CLI)
 
 ## Ports
@@ -93,7 +93,9 @@ seed_demo.sh                         — loads demo_data into kursinis_anomaly-d
 - Loki: label-based indexing only (no full-text), 30-day retention, datasource uid `loki`
 - Anomaly detector runs one shared `Engine.run_cycle(now)` (live = wall clock, eval = virtual clock); counts come from `count_over_time`/metric queries (no 5000-line cap)
 - ML detector (IsolationForest) is OFF in the live loop by default (`ENABLE_ML=false`) — it produced too many false positives; it is measured offline (RQ3). `ML_TRAINING_MODE` = online/frozen; training_data is deque(maxlen=`ML_MAX_TRAINING_SAMPLES`)
-- Evaluation harness (`anomaly-detector/evaluation/`, profile `eval`): replays labeled datasets (AIT-LDS via HTTP-range zip extract, OTRF/EVTX Windows) through `loki-eval` with original timestamps, runs the Engine on a virtual clock, scores precision/recall/F1/FPR per layer + per-technique ATT&CK recall + McNemar/bootstrap, emits LaTeX tables to `eval-results/`
+- Evaluation harness (`anomaly-detector/evaluation/`, profile `eval`): replays labeled datasets (AIT-LDS via HTTP-range zip extract, OTRF/EVTX Windows) through `loki-eval` with original timestamps, runs the Engine on a virtual clock, scores precision/recall/F1/FPR per layer (per tick and per non-overlapping window — ML runs every Nth cycle, so layers are compared per window) + per-technique ATT&CK recall + McNemar/bootstrap, emits LaTeX tables to `eval-results/`
+- OTRF corpus: `evaluation/manifests/otrf_windows_host.csv` (107 Windows host captures, techniques from OTRF metadata, built by `tools/build_otrf_manifest.py`) at a pinned OTRF commit; `fetch otrf` downloads it, the adapter lays captures on one timeline with original in-capture timing. Technique credit is strict: only an alert mapped to the capture's technique counts. `run.json` git SHA gets `-dirty` for uncommitted code
+- Windows rules query only their event IDs (`| json event_id | event_id=~...`): unfiltered, dense Sysmon streams exceed the 5000-line query cap
 - Anomaly detector writes alerts atomically (`tmp` + `os.replace`) to `/data/anomaly_history.json`, and `attack_catalog.json` at startup
 - Synthetic traffic is dashboard-driven only: 4 demo devices (MacBook, Windows 11, `router-01`, `web-server-01`) are seeded into the registry (`SEED_DEFAULT_DEVICES`) and auto-emit normal traffic; the standalone log-generator has been removed
 - Dashboard reads Loki API for live traffic + anomaly_history.json for alerts (shared volume `anomaly-data`)
