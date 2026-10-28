@@ -26,12 +26,12 @@
     errBanner.classList.add("hidden");
     userErr.classList.add("hidden");
     passErr.classList.add("hidden");
-    userEl.classList.remove("border-red-400");
-    passEl.classList.remove("border-red-400");
+    userEl.classList.remove("border-crit");
+    passEl.classList.remove("border-crit");
   }
 
   function showFieldError(fieldEl, errEl, msg) {
-    fieldEl.classList.add("border-red-400");
+    fieldEl.classList.add("border-crit");
     errEl.textContent = msg;
     errEl.classList.remove("hidden");
   }

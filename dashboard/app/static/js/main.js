@@ -3,14 +3,16 @@
 import { el, setPlaceholder, setText } from "./dom.js";
 import { state } from "./state.js";
 import { fetchJSON, logout, openStream, requireAuth } from "./api.js";
-import { t } from "./i18n.js";
-import { initNavigation, navigate, renderHealth, updateSearchUI } from "./shell.js";
+import { applyLabels, t } from "./i18n.js";
+import { initNavigation, initShortcuts, initTheme, navigate, refreshFrameLabels, renderHealth, setLive, setNavCount,
+         showBanner, updateSearchUI } from "./shell.js";
 import { initAlertDialog } from "./alert-dialog.js";
 import { init as initAnomalies, populateLogsHostSelect, renderAnomaliesPage, renderPulseChart, renderRawLogs } from "./pages/anomalies.js";
 import { renderAttackCoverage } from "./pages/attack.js";
 import { closeAttackMenu, init as initDevices, renderDevicesPage } from "./pages/devices.js";
 import { init as initNotifications, load as loadNotificationSettings } from "./pages/notifications.js";
-import { closeRangeMenu, init as initOverview, populateTrafficDeviceSelect, renderKeyEvents, renderMetrics, renderRangeMenu, renderTrafficChart, renderTrafficDeviceStats } from "./pages/overview.js";
+import { closeRangeMenu, init as initOverview, populateTrafficDeviceSelect, renderAlertPanels, renderMetrics, renderRangeMenu,
+         renderTrafficChart, renderTrafficDeviceStats } from "./pages/overview.js";
 
 function applyHealth(data) {
   state.health = data;
@@ -21,7 +23,7 @@ async function loadHealth() {
   try {
     applyHealth(await fetchJSON("/api/health/status"));
   } catch (e) {
-    console.error("Health:", e);
+    loadFailed("Health:", e);
   }
 }
 
@@ -34,7 +36,7 @@ async function loadTrafficCurrent() {
   try {
     applyTrafficCurrent(await fetchJSON("/api/traffic/current"));
   } catch (e) {
-    console.error("Traffic current:", e);
+    loadFailed("Traffic current:", e);
   }
 }
 
@@ -46,16 +48,24 @@ async function loadTrafficHistory() {
     renderTrafficChart();
     if (state.page === "anomalies") renderPulseChart();
   } catch (e) {
-    console.error("Traffic history:", e);
+    loadFailed("Traffic history:", e);
   }
+}
+
+// Nepavykęs įkėlimas: konsolėje — detalės, vartotojui — juosta su „Bandyti dar kartą".
+function loadFailed(what, e) {
+  console.error(what, e);
+  showBanner("error", t("load_failed"), retryAll);
+}
+
+async function retryAll() {
+  await Promise.allSettled([loadHealth(), loadTrafficCurrent(), loadTrafficHistory(), loadAlerts(), loadDevices()]);
 }
 
 function applyAlerts(data) {
   state.alerts = data.alerts || [];
-  renderKeyEvents();
-  setText("hero-threats", String(
-    state.alerts.filter(a => a.severity === "critical" || a.severity === "high").length
-  ));
+  renderAlertPanels();
+  setNavCount(state.alerts.filter(a => a.severity === "critical" || a.severity === "high").length);
   if (state.page === "anomalies") {
     // Išplėstame rodinyje atnaujiname ir visą istoriją, kad sąrašas liktų gyvas.
     if (state.showAllAlerts) loadAllAlerts().then(() => renderAnomaliesPage());
@@ -67,7 +77,7 @@ async function loadAlerts() {
   try {
     applyAlerts(await fetchJSON("/api/alerts/recent?limit=20"));
   } catch (e) {
-    console.error("Alerts:", e);
+    loadFailed("Alerts:", e);
   }
 }
 
@@ -77,7 +87,7 @@ async function loadAllAlerts() {
     const data = await fetchJSON("/api/alerts/history?page=1&size=100");
     state.allAlerts = data.alerts || [];
   } catch (e) {
-    console.error("All alerts:", e);
+    loadFailed("All alerts:", e);
   }
 }
 
@@ -85,7 +95,7 @@ async function loadAttackCoverage() {
   try {
     state.attackCoverage = await fetchJSON("/api/attack/coverage");
   } catch (e) {
-    console.error("ATT&CK:", e);
+    loadFailed("ATT&CK:", e);
     state.attackCoverage = null;
   }
   renderAttackCoverage();
@@ -104,7 +114,7 @@ async function loadDevices() {
   try {
     applyDevices(await fetchJSON("/api/devices/map"));
   } catch (e) {
-    console.error("Devices:", e);
+    loadFailed("Devices:", e);
   }
 }
 
@@ -119,11 +129,12 @@ async function loadRawLogs() {
     const data = await fetchJSON(`/api/traffic/logs?limit=200${q}`);
     applyRawLogs(data.lines || []);
   } catch (e) {
-    console.error("Raw logs:", e);
+    loadFailed("Raw logs:", e);
   }
 }
 
 function applyI18n() {
+  applyLabels();
   setText("sidebar-title",          t("title"));
   setText("nav-label-dashboard",    t("nav_dashboard"));
   setText("nav-label-anomalies",    t("nav_anomalies"));
@@ -135,8 +146,6 @@ function applyI18n() {
   if (state.page === "attack") renderAttackCoverage();
   setText("lang-btn",               t("lang_switch"));
   setPlaceholder("search-input",    t("search_placeholder"));
-  setText("hero-label",             t("hero_label"));
-  setText("hero-uptime-label",      t("hero_uptime"));
   setText("hero-threats-label",     t("hero_threats"));
   setText("hero-threats-sub",        t("metric_threats_sub"));
   setText("metric-logs-label",      t("metric_logs"));
@@ -148,7 +157,6 @@ function applyI18n() {
   renderRangeMenu();   // nustato range-label ir last-24h-label pagal pasirinktą intervalą
   setText("total-label",            t("total"));
   setText("peak-label",             t("peak"));
-  setText("incoming-label",         t("incoming"));
   setText("tds-status-label",       t("info_status_label"));
   setText("tds-logs5m-label",       t("info_logs5m_label"));
   setText("tds-lastseen-label",     t("info_lastseen_label"));
@@ -170,7 +178,6 @@ function applyI18n() {
   setText("logs-subtitle",           t("logs_subtitle"));
   const logsRefreshBtn = el("logs-refresh-btn");
   if (logsRefreshBtn) logsRefreshBtn.title = t("logs_refresh");
-  setText("devices-page-title",     t("devices_page"));
   setText("devices-total-label",    t("map_total"));
   setText("devices-online-label",   t("map_online"));
   setText("map-title",              t("map_title"));
@@ -227,6 +234,7 @@ function applyI18n() {
   setText("notify-save-btn",         t("notify_save"));
   setText("notify-test-btn",         t("notify_test"));
   setPlaceholder("notify-webhook",   t("notify_webhook_ph"));
+  refreshFrameLabels();
   document.documentElement.lang = state.lang;
 }
 
@@ -236,7 +244,7 @@ function toggleLang() {
   applyI18n();
   renderHealth();
   renderMetrics();
-  renderKeyEvents();
+  renderAlertPanels();
   renderTrafficChart();
   populateTrafficDeviceSelect();
   renderTrafficDeviceStats();
@@ -270,10 +278,32 @@ const streamHandlers = {
   traffic: data => { applyTrafficCurrent(data); maybeRefreshHistory(); },
 };
 
+// Gyvų atnaujinimų jungtis; jos būsena rodoma viršutinėje juostoje.
+function connectStream() {
+  const es = openStream(streamHandlers);
+  if (!es) return;
+  es.addEventListener("open", () => setLive(true));
+  es.addEventListener("error", () => setLive(false));
+}
+
+function clearSearch() {
+  state.search = "";
+  const searchInput = el("search-input");
+  if (searchInput) searchInput.value = "";
+  updateSearchUI();
+  if (state.page === "anomalies") renderAnomaliesPage();
+  else if (state.page === "devices") renderDevicesPage();
+}
+
 async function init() {
   if (!requireAuth()) return;
 
   applyI18n();
+  setText("user-name", sessionStorage.getItem("auth_user") || "");
+  setLive(false);
+  // Sparklines ir įrenginių žemėlapis piešiami konkrečiomis spalvomis — perpiešiame.
+  initTheme(() => { renderMetrics(); if (state.page === "devices") renderDevicesPage(); });
+  initShortcuts(clearSearch);
 
   const ctx = { loadTrafficHistory, loadTrafficCurrent, loadAlerts, loadAllAlerts, loadRawLogs, loadDevices };
   initOverview(ctx);
@@ -303,15 +333,7 @@ async function init() {
     });
   }
 
-  if (clearBtn) {
-    clearBtn.addEventListener("click", () => {
-      state.search = "";
-      if (searchInput) searchInput.value = "";
-      updateSearchUI();
-      if (state.page === "anomalies") renderAnomaliesPage();
-      else if (state.page === "devices") renderDevicesPage();
-    });
-  }
+  if (clearBtn) clearBtn.addEventListener("click", clearSearch);
 
   // Laiko intervalo meniu uždaromas paspaudus kitur
   document.addEventListener("click", (ev) => {
@@ -339,13 +361,13 @@ async function init() {
 
   // Gyvi atnaujinimai per SSE — serveris pushina pokyčius viena jungtimi
   // (vietoj periodinio pollinimo).
-  openStream(streamHandlers);
+  connectStream();
 
   // Grįžus į matomą tabą — atnaujiname grafiką ir, jei reikia, atkuriame srautą.
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState !== "visible") return;
     loadTrafficHistory();
-    if (!state.stream || state.stream.readyState === 2) openStream(streamHandlers);
+    if (!state.stream || state.stream.readyState === 2) connectStream();
   });
 }
 

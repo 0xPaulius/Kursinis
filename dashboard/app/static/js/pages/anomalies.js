@@ -2,10 +2,10 @@
 
 import { el, setText } from "../dom.js";
 import { state } from "../state.js";
-import { alertExpl, alertTitle, sevLabel, t } from "../i18n.js";
-import { timeLabel } from "../format.js";
-import { ANOMALY_CARD_CFG, openAlertInfo } from "../alert-dialog.js";
+import { alertExpl, alertTitle, t } from "../i18n.js";
+import { ANOMALY_CARD_CFG, alertRow } from "../alert-dialog.js";
 import { filteredAlerts, updateSearchUI } from "../shell.js";
+import { applyAxes, areaFill, forget, themeOptions, token, track } from "../charts.js";
 
 // main.js duomenų įkėlimo funkcijos (puslapiai main.js neimportuoja).
 let ctx = {};
@@ -26,7 +26,7 @@ export function renderPulseChart() {
 
   const pts = state.history;
   if (!pts.length) {
-    if (state.pulseChart) { state.pulseChart.destroy(); state.pulseChart = null; }
+    if (state.pulseChart) { forget(state.pulseChart); state.pulseChart.destroy(); state.pulseChart = null; }
     canvas.classList.add("hidden");
     if (emptyEl) { emptyEl.classList.remove("hidden"); emptyEl.textContent = t("no_events"); }
     return;
@@ -52,17 +52,15 @@ export function renderPulseChart() {
   const locale = state.lang === "lt" ? "lt-LT" : "en-GB";
   const labels = pts.map(p => new Date(p.time).toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" }));
   const values = pts.map(p => p.count);
-  const pointColors = alertCounts.map(c => (c > 0 ? "#ba1a1a" : "#006c4a"));
   const pointRadii  = alertCounts.map(c => (c > 0 ? 5 : 0));
 
   if (state.pulseChart) {
     const ch = state.pulseChart;
     ch.data.labels = labels;
     ch.data.datasets[0].data = values;
-    ch.data.datasets[0].pointBackgroundColor = pointColors;
-    ch.data.datasets[0].pointBorderColor = pointColors;
     ch.data.datasets[0].pointRadius = pointRadii;
     ch._alertCounts = alertCounts;
+    restylePulseChart(ch, themeOptions());
     ch.update("none");
     return;
   }
@@ -74,22 +72,12 @@ export function renderPulseChart() {
       datasets: [{
         label: "Logs",
         data: values,
-        borderColor: "#006c4a",
-        backgroundColor: (ctx) => {
-          const { ctx: c, chartArea } = ctx.chart;
-          if (!chartArea) return "rgba(0,108,74,0.10)";
-          const g = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-          g.addColorStop(0, "rgba(0,108,74,0.20)");
-          g.addColorStop(1, "rgba(0,108,74,0)");
-          return g;
-        },
+        backgroundColor: areaFill("--ok", 0.18),
         fill: true,
         tension: 0.35,
-        borderWidth: 2,
+        borderWidth: 1.5,
         pointRadius: pointRadii,
         pointHoverRadius: 6,
-        pointBackgroundColor: pointColors,
-        pointBorderColor: pointColors,
       }],
     },
     options: {
@@ -110,14 +98,34 @@ export function renderPulseChart() {
         },
       },
       scales: {
-        x: { grid: { color: "rgba(120,118,123,0.12)" }, ticks: { color: "#78767b", maxTicksLimit: 8, font: { size: 11 } } },
-        y: { grid: { color: "rgba(120,118,123,0.12)" }, ticks: { color: "#78767b", font: { size: 11 } }, beginAtZero: true },
+        x: { ticks: { maxTicksLimit: 8 } },
+        y: { beginAtZero: true },
       },
     },
   });
   state.pulseChart._alertCounts = alertCounts;
+  restylePulseChart(state.pulseChart, themeOptions());
+  state.pulseChart.update("none");
+  track(state.pulseChart, restylePulseChart);
 }
 
+// Taškas raudonas, kai tame intervale buvo alertas; spalvos — iš temos.
+function restylePulseChart(chart, o) {
+  const ok = token("--ok");
+  const crit = token("--crit");
+  const colors = (chart._alertCounts || []).map(c => (c > 0 ? crit : ok));
+  Object.assign(chart.data.datasets[0], { borderColor: ok, pointBackgroundColor: colors, pointBorderColor: colors });
+  applyAxes(chart, o);
+}
+
+// Rizikos spalva ir užrašas įvykio tipo skydeliui (pagal ANOMALY_CARD_CFG.risk).
+const RISK = {
+  critical: { cls: "text-crit", key: "sev_critical" },
+  medium:   { cls: "text-warn", key: "sev_medium" },
+  warning:  { cls: "text-warn", key: "badge_warning" },
+};
+
+// Vienas skydelis kiekvienam iš 3 dažniausių įvykio tipų: skaičius ir rizika.
 function renderAnomalyCards() {
   const cardsEl = el("anomaly-cards");
   if (!cardsEl) return;
@@ -129,114 +137,52 @@ function renderAnomalyCards() {
 
   if (!top3.length) {
     const empty = document.createElement("div");
-    empty.className = "col-span-3 bg-surface-container-lowest rounded-lg p-8 text-center border border-outline-variant";
-    const icon = document.createElement("span");
-    icon.className = "material-symbols-outlined text-4xl text-secondary block mb-2";
-    icon.textContent = "check_circle";
-    const msg = document.createElement("p");
-    msg.className = "text-on-surface-variant text-sm font-label";
-    msg.textContent = t("anomaly_cards_empty");
-    empty.appendChild(icon);
-    empty.appendChild(msg);
+    empty.className = "panel col-span-12 empty";
+    empty.textContent = t("anomaly_cards_empty");
     cardsEl.appendChild(empty);
     return;
   }
 
-  const riskLabels = { critical: t("sev_critical"), medium: t("sev_medium"), warning: t("badge_warning") };
-
-  top3.forEach(([type]) => {
+  top3.forEach(([type, n]) => {
     const cfg = ANOMALY_CARD_CFG[type] || ANOMALY_CARD_CFG.high_error_rate;
-
-    const card = document.createElement("div");
-    card.className = "bg-surface-container-lowest rounded-lg p-6 hover:border-outline transition-colors duration-200 group border border-outline-variant" +
-      (cfg.risk === "critical" ? " border-t-4 border-t-error/40" : "");
-
-    const iconWrap = document.createElement("div");
-    iconWrap.className = `w-12 h-12 rounded-2xl flex items-center justify-center mb-4 group-hover:rotate-6 transition-transform ${cfg.bg}`;
-    const icon = document.createElement("span");
-    icon.className = `material-symbols-outlined text-2xl ${cfg.fg}`;
-    icon.textContent = cfg.icon;
-    iconWrap.appendChild(icon);
-
-    const title = document.createElement("h3");
-    title.className = "text-base font-bold font-headline mb-2";
-    title.textContent = alertTitle(type, type);
-
-    const desc = document.createElement("p");
-    desc.className = "text-on-surface-variant text-xs leading-relaxed mb-4";
-    desc.textContent = alertExpl(type);
-
-    const badge = document.createElement("div");
-    badge.className = `flex items-center gap-2 px-2.5 py-1 w-fit rounded-full text-[10px] font-bold uppercase font-label ${cfg.badge_bg} ${cfg.badge_fg}`;
-    badge.textContent = riskLabels[cfg.risk] || cfg.risk;
-
-    card.appendChild(iconWrap);
-    card.appendChild(title);
-    card.appendChild(desc);
-    card.appendChild(badge);
-    cardsEl.appendChild(card);
+    const risk = RISK[cfg.risk] || { cls: "text-muted", key: "" };
+    const panel = document.createElement("div");
+    panel.className = "panel stat col-span-12 md:col-span-4";
+    panel.title = alertExpl(type);
+    const head = document.createElement("div");
+    head.className = "panel-h";
+    const name = document.createElement("span");
+    name.textContent = alertTitle(type, type);
+    const label = document.createElement("span");
+    label.className = `panel-sub ${risk.cls}`;
+    label.textContent = risk.key ? t(risk.key) : "";
+    head.append(name, label);
+    const value = document.createElement("div");
+    value.className = `stat-v ${risk.cls}`;
+    value.textContent = String(n);
+    panel.append(head, value);
+    cardsEl.appendChild(panel);
   });
 }
 
 function renderChronology() {
-  const listEl = el("chronology-list");
-  if (!listEl) return;
-  listEl.textContent = "";
-
+  const tbody = el("chronology-table");
+  if (!tbody) return;
+  tbody.textContent = "";
   setText("view-all-chrono", state.showAllAlerts ? t("show_less") : t("view_all_chrono"));
 
   const alerts = filteredAlerts();
-
   if (!alerts.length) {
-    const msg = document.createElement("p");
-    msg.className = "text-center py-6 text-on-surface-variant text-sm font-label";
-    msg.textContent = t("no_events");
-    listEl.appendChild(msg);
+    const tr = document.createElement("tr");
+    const td = document.createElement("td");
+    td.colSpan = 6;
+    td.className = "empty";
+    td.textContent = t("no_events");
+    tr.appendChild(td);
+    tbody.appendChild(tr);
     return;
   }
-
-  const SEV_DOT = {
-    critical: "bg-error ring-error-container/30",
-    high:     "bg-error ring-error-container/30",
-    medium:   "bg-tertiary-fixed-dim ring-tertiary-fixed/30",
-    low:      "bg-secondary ring-secondary-container/30",
-  };
-
-  (state.showAllAlerts ? alerts : alerts.slice(0, 20)).forEach(a => {
-    const dot = SEV_DOT[a.severity] || "bg-outline ring-outline-variant/30";
-
-    const row = document.createElement("div");
-    row.className = "flex items-center gap-5 p-3 hover:bg-surface-container-low transition-colors rounded-lg group cursor-pointer";
-    row.addEventListener("click", () => openAlertInfo(a));
-
-    const timeEl = document.createElement("div");
-    timeEl.className = "text-[10px] font-bold text-on-surface-variant w-12 tabular-nums font-label";
-    timeEl.textContent = timeLabel(a.timestamp);
-
-    const dotEl = document.createElement("div");
-    dotEl.className = `w-1.5 h-1.5 rounded-full ring-2 shrink-0 ${dot}`;
-
-    const info = document.createElement("div");
-    info.className = "flex-1 min-w-0";
-    const titleEl = document.createElement("p");
-    titleEl.className = "text-sm font-semibold truncate";
-    titleEl.textContent = alertTitle(a.alert_type, a.title);
-    const meta = document.createElement("p");
-    meta.className = "text-[10px] text-on-surface-variant";
-    meta.textContent = (a.source_ip || a.source_host ? (a.source_ip || a.source_host) + " • " : "") + sevLabel(a.severity);
-    info.appendChild(titleEl);
-    info.appendChild(meta);
-
-    const arrow = document.createElement("span");
-    arrow.className = "material-symbols-outlined text-on-surface-variant opacity-0 group-hover:opacity-100 transition-opacity text-xl";
-    arrow.textContent = "arrow_forward";
-
-    row.appendChild(timeEl);
-    row.appendChild(dotEl);
-    row.appendChild(info);
-    row.appendChild(arrow);
-    listEl.appendChild(row);
-  });
+  (state.showAllAlerts ? alerts : alerts.slice(0, 20)).forEach(a => tbody.appendChild(alertRow(a)));
 }
 
 async function toggleShowAllAlerts() {
@@ -245,10 +191,11 @@ async function toggleShowAllAlerts() {
   renderAnomaliesPage();
 }
 
-const _LOG_SEV_DOT = {
-  emerg: "bg-error", alert: "bg-error", crit: "bg-error", err: "bg-error", error: "bg-error",
-  warning: "bg-tertiary-fixed-dim", warn: "bg-tertiary-fixed-dim",
-  notice: "bg-secondary", info: "bg-secondary", debug: "bg-outline",
+// Kairiosios juostelės spalva pagal syslog lygį.
+const LOG_SEV_COLOR = {
+  emerg: "var(--crit)", alert: "var(--crit)", crit: "var(--crit)", err: "var(--crit)", error: "var(--crit)",
+  warning: "var(--warn)", warn: "var(--warn)",
+  notice: "var(--ok)", info: "var(--ok)", debug: "var(--text-dim)",
 };
 
 function onLogsHostChange() {
@@ -299,17 +246,9 @@ export function renderRawLogs() {
 
   logs.forEach(l => {
     const row = document.createElement("div");
-    row.className = "flex items-start gap-2 px-2 py-1 rounded hover:bg-surface-container-low transition-colors";
-
-    const dot = document.createElement("span");
-    dot.className = "w-1.5 h-1.5 rounded-full mt-1.5 shrink-0 " + (_LOG_SEV_DOT[l.severity] || "bg-outline");
-
-    const text = document.createElement("span");
-    text.className = "text-on-surface break-all whitespace-pre-wrap min-w-0 leading-relaxed";
-    text.textContent = l.line || "";
-
-    row.appendChild(dot);
-    row.appendChild(text);
+    row.className = "ln";
+    row.style.borderLeftColor = LOG_SEV_COLOR[l.severity] || "var(--text-dim)";
+    row.textContent = l.line || "";
     listEl.appendChild(row);
   });
 }

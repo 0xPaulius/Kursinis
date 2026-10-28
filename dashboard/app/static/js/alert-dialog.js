@@ -1,23 +1,49 @@
-// Įspėjimo detalių langas (atidaromas iš apžvalgos ir anomalijų puslapių).
+// Įspėjimų lentelės eilutė ir detalių langas (naudoja apžvalgos ir anomalijų puslapiai).
 
-import { el, setText } from "./dom.js";
+import { closeDialog, el, openDialog, setText } from "./dom.js";
 import { alertExpl, alertRec, alertTitle, detailLabel, methodLabel, sevLabel, t } from "./i18n.js";
-import { formatDetailValue, fullTime } from "./format.js";
+import { formatDetailValue, fullTime, shortTime } from "./format.js";
 
-// Anomaly type visual config
+function sevBadge(severity) {
+  const badge = document.createElement("span");
+  badge.className = `sev-badge sev-${severity}`;
+  const dot = document.createElement("i");
+  dot.className = `bg-sev-${severity}`;
+  const label = document.createElement("span");
+  label.textContent = sevLabel(severity);
+  badge.append(dot, label);
+  return badge;
+}
+
+// Lentelės eilutė: laikas, lygis, įvykis, šaltinis, įrenginys, ATT&CK; paspaudus — detalės.
+export function alertRow(a) {
+  const tr = document.createElement("tr");
+  tr.className = "is-click";
+  tr.addEventListener("click", () => openAlertInfo(a));
+  const cell = (text, cls) => {
+    const td = document.createElement("td");
+    if (cls) td.className = cls;
+    td.textContent = text;
+    tr.appendChild(td);
+  };
+  cell(shortTime(a.timestamp), "mono text-muted whitespace-nowrap");
+  const sevTd = document.createElement("td");
+  sevTd.appendChild(sevBadge(a.severity));
+  tr.appendChild(sevTd);
+  cell(alertTitle(a.alert_type, a.title));
+  cell(a.source_ip || "—", "mono text-muted");
+  cell(a.source_host || "—");
+  cell((a.attack_techniques || []).join(", ") || "—", "mono text-accent whitespace-nowrap");
+  return tr;
+}
+
+// Įvykio tipo ikona (detalių lange) ir rizika (anomalijų puslapio skydeliuose)
 export const ANOMALY_CARD_CFG = {
-  ssh_bruteforce:    { icon: "login",         bg: "bg-tertiary-fixed",             fg: "text-on-tertiary-container",  badge_bg: "bg-tertiary-fixed",             badge_fg: "text-on-tertiary-container",  risk: "medium"   },
-  invalid_user_scan: { icon: "person_off",    bg: "bg-error-container",            fg: "text-on-error-container",     badge_bg: "bg-error-container",            badge_fg: "text-on-error-container",     risk: "critical" },
-  firewall_spike:    { icon: "shield",        bg: "bg-error-container",            fg: "text-on-error-container",     badge_bg: "bg-error-container",            badge_fg: "text-on-error-container",     risk: "critical" },
-  high_error_rate:   { icon: "error_outline", bg: "bg-surface-container-highest",  fg: "text-on-surface",             badge_bg: "bg-surface-container-high",     badge_fg: "text-on-surface-variant",     risk: "warning"  },
-  log_volume_spike:  { icon: "bar_chart",     bg: "bg-tertiary-fixed",             fg: "text-on-tertiary-container",  badge_bg: "bg-tertiary-fixed",             badge_fg: "text-on-tertiary-container",  risk: "medium"   },
-};
-
-const _SEV_BADGE = {
-  critical: "bg-error-container text-on-error-container",
-  high:     "bg-error-container text-on-error-container",
-  medium:   "bg-tertiary-fixed text-on-tertiary-container",
-  low:      "bg-secondary-container text-on-secondary-container",
+  ssh_bruteforce:    { icon: "login",         risk: "medium"   },
+  invalid_user_scan: { icon: "person_off",    risk: "critical" },
+  firewall_spike:    { icon: "shield",        risk: "critical" },
+  high_error_rate:   { icon: "error_outline", risk: "warning"  },
+  log_volume_spike:  { icon: "bar_chart",     risk: "medium"   },
 };
 
 // Parodo/paslepia eilutę informacijos lange (ir įrašo reikšmę).
@@ -38,12 +64,11 @@ function renderAlertDetails(details) {
   wrap.classList.remove("hidden");
   entries.forEach(([k, v]) => {
     const row = document.createElement("div");
-    row.className = "flex justify-between gap-4 py-1.5 border-b border-outline-variant/30 last:border-0";
+    row.className = "flex justify-between gap-4";
     const dt = document.createElement("dt");
-    dt.className = "text-on-surface-variant font-label shrink-0";
     dt.textContent = detailLabel(k);
     const dd = document.createElement("dd");
-    dd.className = "font-medium text-right break-all";
+    dd.className = "break-all";
     dd.textContent = formatDetailValue(v);
     row.appendChild(dt);
     row.appendChild(dd);
@@ -53,24 +78,17 @@ function renderAlertDetails(details) {
 
 export function openAlertInfo(a) {
   if (!a) return;
-  const modal = el("alert-info-modal");
-  if (!modal) return;
+  if (!el("alert-info-modal")) return;
 
-  const cfg = ANOMALY_CARD_CFG[a.alert_type] ||
-    { icon: "warning", bg: "bg-error-container", fg: "text-on-error-container" };
-
-  const iconWrap = el("alert-info-icon-wrap");
-  if (iconWrap) iconWrap.className = `w-8 h-8 rounded-full flex items-center justify-center shrink-0 ${cfg.bg}`;
   const icon = el("alert-info-icon");
-  if (icon) { icon.className = `material-symbols-outlined text-lg ${cfg.fg}`; icon.textContent = cfg.icon; }
+  if (icon) {
+    icon.className = `material-symbols-outlined text-[20px] shrink-0 sev-${a.severity}`;
+    icon.textContent = (ANOMALY_CARD_CFG[a.alert_type] || { icon: "warning" }).icon;
+  }
 
   setText("alert-info-title", alertTitle(a.alert_type, a.title));
 
-  const sev = el("alert-info-severity");
-  if (sev) {
-    sev.className = `px-2.5 py-1 rounded-full text-[10px] font-bold uppercase font-label ${_SEV_BADGE[a.severity] || _SEV_BADGE.low}`;
-    sev.textContent = sevLabel(a.severity);
-  }
+  el("alert-info-severity")?.replaceChildren(sevBadge(a.severity));
   setText("alert-info-time", fullTime(a.timestamp));
 
   setAlertRow("alert-info-ip-row", "alert-info-ip", a.source_ip);
@@ -88,7 +106,7 @@ export function openAlertInfo(a) {
       techRow.classList.remove("hidden");
       techs.forEach(tid => {
         const chip = document.createElement("span");
-        chip.className = "font-data-mono text-label-sm px-1.5 py-0.5 rounded bg-surface-container-high text-on-surface";
+        chip.className = "mono text-[11.5px] px-1.5 py-0.5 rounded bg-hover text-accent";
         chip.textContent = tid;
         techWrap.appendChild(chip);
       });
@@ -100,11 +118,8 @@ export function openAlertInfo(a) {
   setText("alert-info-expl", alertExpl(a.alert_type) || a.explanation || "");
 
   const rec = alertRec(a.alert_type) || a.recommendation || "";
-  const recWrap = el("alert-info-rec-wrap");
-  if (recWrap) {
-    if (rec) { recWrap.className = "bg-surface-container rounded-lg p-3"; setText("alert-info-rec", rec); }
-    else { recWrap.className = "hidden"; }
-  }
+  el("alert-info-rec-wrap")?.classList.toggle("hidden", !rec);
+  setText("alert-info-rec", rec);
 
   renderAlertDetails(a.details);
 
@@ -121,12 +136,11 @@ export function openAlertInfo(a) {
     }
   }
 
-  modal.classList.remove("hidden");
+  openDialog("alert-info-modal");
 }
 
 function closeAlertInfo() {
-  const modal = el("alert-info-modal");
-  if (modal) modal.classList.add("hidden");
+  closeDialog("alert-info-modal");
 }
 
 function onAlertInfoBackdrop(event) {

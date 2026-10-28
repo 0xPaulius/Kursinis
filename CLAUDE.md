@@ -37,7 +37,9 @@ dashboard/app/manage_users.py        — CLI: python -m app.manage_users (list/a
 dashboard/app/services/attack_coverage.py — ATT&CK coverage from /data/attack_catalog.json + alert history
 dashboard/app/log_selectors.py       — shared {job=~"syslog|windows|linux_endpoint"} selector
 dashboard/app/services/              — loki_client, alert_reader (mtime-cached), health_checker, notifier (webhook, /state/notify.json)
-dashboard/app/static/                — HTML, CSS, JS (Tailwind + Chart.js)
+dashboard/app/static/index.html      — page frame (top bar, menu), 5 page sections, 3 dialogs; no inline scripts or handlers (login.html too)
+dashboard/app/static/css/theme.css   — Grafana-style theme: CSS variables (dark default, light) + component classes (panel, stat, tbl, btn, dlg…)
+dashboard/app/static/js/             — ES modules, no build step: main.js (entry: auth, loaders, SSE dispatch, language) + state, dom, i18n, format, api, charts, shell (menu, hash routing, top bar, search, Esc), alert-dialog, pages/{overview,anomalies,devices,attack,notifications}.js; login.js; classic theme-boot.js + tailwind.config.js; vendored tailwind.min.js, chart.min.js
 dashboard/app/services/device_registry.py — registered demo devices (JSON persistence in /state)
 dashboard/app/services/syslog_emitter.py  — sends normal + attack syslog (UDP) to syslog-ng
 dashboard/app/services/host_info.py       — reads mounted host files for self-server kernel/OS version
@@ -45,7 +47,7 @@ dashboard/app/services/device_monitor.py  — builds device map (per-host Loki s
 dashboard/app/routers/devices.py     — device CRUD, demo attack scenario, GET /map (node map)
 dashboard/app/models/schemas.py      — Pydantic response models
 dashboard/Dockerfile                 — Python 3.12-slim + uvicorn
-dashboard/tests/                     — pytest: auth + API (TestClient with isolated tmp state)
+dashboard/tests/                     — pytest: auth + API (TestClient with isolated tmp state) + static frontend checks
 demo_data/anomaly_history.json       — seed alert data for demo/testing
 seed_demo.sh                         — loads demo_data into kursinis_anomaly-data volume
 demo.sh                              — presentation CLI against the running stack (needs curl, jq; admin creds from .env)
@@ -85,7 +87,7 @@ tools/                               — gen-certs.sh (ca/server/client, `bundle
 Runtime images contain no pytest — run tests in local uv venvs (Python 3.12, `.venv/` gitignored):
 - One-time: `cd anomaly-detector && uv venv --python 3.12 && uv pip install -r requirements-eval.txt`; `cd dashboard && uv venv --python 3.12 && uv pip install -r requirements.txt pytest`
 - `cd anomaly-detector && .venv/bin/python -m pytest tests/ -q` — 120 tests (rule, statistical, ML, engine, windows, linux incl. real/syslog-forwarded auditd records, eval harness)
-- `cd dashboard && .venv/bin/python -m pytest tests/ -q` — 31 tests (auth: UserStore scrypt, tokens, roles, throttling, CLI; API: devices, sessions, permissions, detector + endpoint health, traffic counts, alert matching)
+- `cd dashboard && .venv/bin/python -m pytest tests/ -q` — 35 tests (auth: UserStore scrypt, tokens, roles, throttling, CLI; API: devices, sessions, permissions, detector + endpoint health, traffic counts, alert matching, no-cache headers; frontend: no inline handlers/scripts, module imports resolve)
 
 ## Ports
 - 514/TCP,UDP — syslog input from network
@@ -101,7 +103,7 @@ Runtime images contain no pytest — run tests in local uv venvs (Python 3.12, `
 - Academic comments in Lithuanian, technical in English
 - YAML configs for Loki/Grafana, Alloy river syntax, native syntax for syslog-ng
 - Grafana: JSON provisioned dashboards, Europe/Vilnius timezone
-- Dashboard: FastAPI + Vanilla JS + Tailwind CSS, i18n (LT/EN)
+- Dashboard: FastAPI + vanilla JS ES modules (no bundler) + Tailwind runtime + Chart.js, Grafana-style dark/light theme, i18n (LT/EN)
 
 ## Key Architecture Decisions
 - syslog-ng writes files → Alloy reads them (shared Docker volume `syslog-ng-logs`); Alloy replaced Promtail (`config/alloy/collector.alloy` = `alloy convert` output). Files are per weekday (`all-Thu.log`, `security-*`, `errors-*`) with `overwrite-if-older(518000)`, so at most 7 days stay on disk; Alloy globs `all-*.log` and drops the `filename` label (eval ingest/golden fixture match)
@@ -133,8 +135,10 @@ Runtime images contain no pytest — run tests in local uv venvs (Python 3.12, `
 - AlertReader is mtime-cached and injected via DI; alert IDs are deterministic sha1(ts|type|ip|host[|details.key])[:16]; `AlertItem.attack_techniques` surfaces ATT&CK IDs in the UI
 - Health checker reports syslog-ng/alloy as `unknown` when Loki is down; probes Alloy `/-/ready` directly; endpoint-telemetry check over `{job=~"windows|linux_endpoint"}` is ok with data in the last 5 min, a warning with the silence age if data was seen within 7 days, hidden otherwise (agentless Linux is `job="syslog"`, covered only by the general freshness check); anomaly-detector is `critical` when its heartbeat `/data/detector.alive` (touched every cycle) is missing or older than 2 min
 - Dashboard traffic counts (`/api/traffic/current`) come from a Loki instant metric query, not downloaded lines
+- Dashboard frontend (Grafana-style, no build step): colors are CSS variables in `css/theme.css` (dark default, light via `<html data-theme="light">`, choice in localStorage); `theme-boot.js` applies it before first paint, `tailwind.config.js` maps Tailwind colors to the variables (so opacity modifiers like `bg-panel/50` don't work), and charts read the variables and recolor on switch (`charts.js` `track()`/`applyTheme()`). Pages are ES modules (`pages/*.js`, `init(ctx)`/`render()`; loaders come from `main.js` via `ctx`, so pages never import `main.js`) with hash routing (`#dashboard|anomalies|devices|attack|messages`, reload keeps the page). No inline handlers or scripts (pytest checks). `/`, `/login`, `/static/*` are sent with `Cache-Control: no-cache`, so browsers revalidate after an upgrade
 
 ## Gotchas
+- A browser that cached the pre-redesign dashboard (`app.js`, no `no-cache` header yet) needs one hard refresh (Ctrl+Shift+R) after the upgrade; later updates revalidate on their own
 - After a detector restart `log_volume_spike` stays silent for 1 h (in-memory baseline warm-up); rule alerts and `high_error_rate` fire at once — restart well before a demo
 - Loki `align_queries_with_step: true` floors range-metric queries to step boundaries, so the newest partial step is missing: use `AsyncLokiClient.query_instant` for "last N minutes" numbers. The traffic-history chart keeps its raw-line fallback because a fresh stack would otherwise show nothing for up to one step (1 h on the 24 h view). Known gap: device-map `logs_5m`/`logs_1h` still use aligned range queries, so a new device can look offline for up to 5 min
 - Every service has a fixed `container_name`, so a second stack (`-p other`) collides; for throwaway end-to-end tests use a separate compose file without container names or host ports

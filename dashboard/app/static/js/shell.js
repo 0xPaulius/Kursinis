@@ -3,9 +3,11 @@
 import { el, setText } from "./dom.js";
 import { state } from "./state.js";
 import { alertTitle, t } from "./i18n.js";
+import { applyTheme } from "./charts.js";
 
 const PAGES = ["dashboard", "anomalies", "devices", "attack", "messages"];
 let onEnter = () => {};
+let liveConnected = false;
 
 // main.js perduoda, ką daryti atidarius puslapį; puslapis laikomas URL #fragmente.
 export function initNavigation(enter) {
@@ -30,40 +32,124 @@ function showPage(page) {
   document.querySelectorAll(".page").forEach(p => p.classList.toggle("active", p.id === "page-" + page));
   PAGES.forEach(p => { const b = el("nav-" + p); if (b) b.classList.toggle("active", p === page); });
   state.page = page;
+  setText("crumb-page", t("nav_" + page));
   onEnter(page);
 }
 
+// Temos jungiklis: <html data-theme>, išsaugoma naršyklėje; grafikai perpiešiami iš karto.
+export function initTheme(onChange = () => {}) {
+  el("theme-btn")?.addEventListener("click", () => {
+    const next = document.documentElement.dataset.theme === "light" ? "dark" : "light";
+    document.documentElement.dataset.theme = next;
+    localStorage.setItem("theme", next);
+    paintThemeButton();
+    applyTheme();
+    onChange();
+  });
+  paintThemeButton();
+}
+
+function paintThemeButton() {
+  const btn = el("theme-btn");
+  if (!btn) return;
+  const light = document.documentElement.dataset.theme === "light";
+  const icon = btn.querySelector(".material-symbols-outlined");
+  if (icon) icon.textContent = light ? "dark_mode" : "light_mode";
+  btn.title = t(light ? "theme_dark" : "theme_light");
+}
+
+// Ctrl/Cmd+K — į paiešką; Esc paieškoje — išvalyti.
+export function initShortcuts(clearSearch) {
+  document.addEventListener("keydown", e => {
+    const search = el("search-input");
+    const dialog = document.querySelector(".dlg-backdrop:not(.hidden)");
+    if ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === "k") {
+      e.preventDefault();
+      search?.focus();
+    } else if (e.key === "Escape" && dialog) {
+      dialog.classList.add("hidden");
+    } else if (e.key === "Escape" && document.activeElement === search) {
+      clearSearch();
+    }
+  });
+}
+
+export function setLive(connected) {
+  liveConnected = connected;
+  const box = el("live-status");
+  if (!box) return;
+  while (box.firstChild) box.removeChild(box.firstChild);
+  const dot = document.createElement("span");
+  dot.className = "app-dot";
+  dot.style.background = connected ? "var(--ok)" : "var(--warn)";
+  const label = document.createElement("span");
+  label.textContent = t(connected ? "live" : "reconnecting");
+  box.append(dot, label);
+}
+
+// Po kalbos perjungimo: rėmo užrašai, kurie nėra statiniai data-i18n.
+export function refreshFrameLabels() {
+  setText("crumb-page", t("nav_" + state.page));
+  setLive(liveConnected);
+  paintThemeButton();
+}
+
+export function setNavCount(n) {
+  const badge = el("nav-anomalies-count");
+  if (!badge) return;
+  badge.textContent = n > 0 ? String(n) : "";
+  badge.classList.toggle("hidden", !(n > 0));
+}
+
+export function showBanner(kind, text, retry) {
+  const box = el("app-banner");
+  if (!box) return;
+  box.className = `banner is-${kind}`;
+  while (box.firstChild) box.removeChild(box.firstChild);
+  const icon = document.createElement("span");
+  icon.className = "material-symbols-outlined";
+  icon.textContent = kind === "error" ? "error" : "info";
+  const msg = document.createElement("span");
+  msg.className = "flex-1";
+  msg.textContent = text;
+  box.append(icon, msg);
+  if (retry) {
+    const again = document.createElement("button");
+    again.className = "btn";
+    again.textContent = t("retry");
+    again.addEventListener("click", () => { hideBanner(); retry(); });
+    box.append(again);
+  }
+  const close = document.createElement("button");
+  close.className = "btn btn-icon";
+  close.title = t("close");
+  const x = document.createElement("span");
+  x.className = "material-symbols-outlined";
+  x.textContent = "close";
+  close.append(x);
+  close.addEventListener("click", hideBanner);
+  box.append(close);
+}
+
+export function hideBanner() {
+  el("app-banner")?.classList.add("hidden");
+}
+
+const HEALTH_COLOR = { ok: "var(--ok)", warning: "var(--warn)", critical: "var(--crit)", unknown: "var(--text-dim)" };
+
+// Sistemos būklė viršutinėje juostoje; kiekvienos paslaugos būsena — užuominoje (title).
 export function renderHealth() {
   const { overall, services } = state.health;
   const badgeEl = el("health-badge");
   if (!badgeEl) return;
-
-  const cfgMap = {
-    ok:       { dot: "bg-secondary animate-pulse", bg: "bg-secondary-container",  text: "text-on-secondary-container" },
-    warning:  { dot: "bg-yellow-500",              bg: "bg-tertiary-fixed",        text: "text-on-tertiary-container"  },
-    critical: { dot: "bg-error animate-pulse",     bg: "bg-error-container",       text: "text-on-error-container"     },
-    unknown:  { dot: "bg-outline",                 bg: "bg-surface-container",     text: "text-on-surface-variant"     },
-  };
-  const cfg = cfgMap[overall] || cfgMap.unknown;
-
-  // Build badge using safe DOM methods
-  badgeEl.className = `flex items-center gap-2 px-3 py-1.5 rounded-full ${cfg.bg}`;
   while (badgeEl.firstChild) badgeEl.removeChild(badgeEl.firstChild);
-
-  const dot = document.createElement("div");
-  dot.className = `w-2 h-2 rounded-full ${cfg.dot}`;
-  badgeEl.appendChild(dot);
-
+  const dot = document.createElement("span");
+  dot.className = "app-dot";
+  dot.style.background = HEALTH_COLOR[overall] || HEALTH_COLOR.unknown;
   const label = document.createElement("span");
-  label.className = `text-[10px] font-bold tracking-wide uppercase font-label ${cfg.text}`;
   label.textContent = t("badge_" + overall) || t("badge_unknown");
-  badgeEl.appendChild(label);
-
-  // Hero
-  const titleKey = { ok: "hero_safe", warning: "hero_warning", critical: "hero_critical" };
-  setText("hero-title", t(titleKey[overall] || "hero_safe"));
-  setText("hero-desc",  t(overall === "ok" ? "hero_desc_safe" : "hero_desc_warn"));
-  setText("hero-uptime", (services || []).every(s => s.status === "ok") ? "100%" : "—");
+  badgeEl.append(dot, label);
+  badgeEl.title = (services || []).map(s => `${s.label}: ${s.message}`).join("\n");
 }
 
 function alertMatchesQuery(a, q) {

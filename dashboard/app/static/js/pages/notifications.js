@@ -8,8 +8,7 @@ function setNotifyStatus(msg, kind) {
   const s = el("notify-status");
   if (!s) return;
   s.textContent = msg || "";
-  s.className = "text-body-md font-label " +
-    (kind === "error" ? "text-error" : kind === "ok" ? "text-secondary" : "text-on-surface-variant");
+  s.className = "text-[12.5px] " + (kind === "error" ? "text-crit" : kind === "ok" ? "text-ok" : "text-muted");
 }
 
 function notifyPayload() {
