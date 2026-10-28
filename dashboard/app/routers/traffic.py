@@ -55,22 +55,25 @@ async def get_traffic_current(
     loki: Annotated[AsyncLokiClient, Depends(get_loki)],
 ) -> TrafficCurrent:
     """Dabartinis žurnalų srautas per paskutines 5 minutes."""
-    now = datetime.datetime.now(datetime.timezone.utc)
-    start = now - datetime.timedelta(minutes=5)
-
-    lines = await loki.query_range(logs_selector(), start=start, end=now)
+    # Kiekius skaičiuoja Loki (metric query) — eilučių atsisiuntimas apribotas 5000.
+    series = await loki.query_instant(
+        f'sum by (job, severity) (count_over_time({logs_selector()}[5m]))')
 
     by_severity: dict[str, int] = {}
     by_job: dict[str, int] = {}
 
-    for entry in lines:
-        labels = entry.get("labels", {})
+    for item in series:
+        labels = item.get("metric", {})
+        try:
+            count = int(float(item["value"][1]))
+        except (KeyError, IndexError, ValueError, TypeError):
+            continue
         sev = labels.get("severity", "unknown")
         job = labels.get("job", "unknown")
-        by_severity[sev] = by_severity.get(sev, 0) + 1
-        by_job[job] = by_job.get(job, 0) + 1
+        by_severity[sev] = by_severity.get(sev, 0) + count
+        by_job[job] = by_job.get(job, 0) + count
 
-    total = len(lines)
+    total = sum(by_job.values())
     lpm = round(total / 5.0, 1)
 
     return TrafficCurrent(

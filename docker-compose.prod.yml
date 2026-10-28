@@ -1,0 +1,48 @@
+####################################################################
+# Gamybinis režimas (realus biuras, ne demonstracija)
+#
+# setup-collector.sh įrašo į .env:
+#   COMPOSE_FILE=docker-compose.yml:docker-compose.prod.yml
+#   COMPOSE_PROFILES=anomaly,endpoints
+# todėl paprastas `docker compose up -d` naudoja ir šį failą.
+# Grįžti į demonstracinį režimą: ištrinkite šias dvi eilutes iš .env.
+####################################################################
+
+services:
+  anomaly-detector:
+    environment:
+      - CHECK_INTERVAL=60                          # tokiu žingsniu matuotas vertinimas
+      - ALERT_WEBHOOK_URL=${ALERT_WEBHOOK_URL:-}   # arba dashboard'o Pranešimai, ne abu (siųstų dukart)
+
+  # Dashboard ir Grafana — HTTPS su kolektoriaus sertifikatu; be įspėjimo naršyklė
+  # jungiasi tik administratorių kompiuteriuose įdiegus certs/ca.crt kaip patikimą CA.
+  dashboard:
+    environment:
+      - SYNTHETIC_TRAFFIC=false
+      - SEED_DEFAULT_DEVICES=0
+      - UVICORN_SSL_CERTFILE=/certs/collector.crt
+      - UVICORN_SSL_KEYFILE=/certs/collector.key
+    volumes:
+      - ./certs/server:/certs:ro
+
+  grafana:
+    # Grafana veikia kaip uid 472: raktą (0640) skaito per certs/server savininko grupę.
+    group_add:
+      - "${CERTS_GID:?paleiskite ./setup-collector.sh}"
+    volumes:
+      - ./certs/server:/certs:ro
+    environment:
+      - GF_SERVER_PROTOCOL=https
+      - GF_SERVER_CERT_FILE=/certs/collector.crt
+      - GF_SERVER_CERT_KEY=/certs/collector.key
+      - GF_ANALYTICS_REPORTING_ENABLED=false
+      - GF_ANALYTICS_CHECK_FOR_UPDATES=false
+      - GF_ANALYTICS_CHECK_FOR_PLUGIN_UPDATES=false
+
+  alloy:
+    command: [run, --server.http.listen-addr=0.0.0.0:12345, --storage.path=/var/lib/alloy/data,
+              --disable-reporting, /etc/alloy/config.alloy]
+
+  alloy-gateway:
+    command: [run, --server.http.listen-addr=0.0.0.0:12345, --storage.path=/var/lib/alloy/data,
+              --disable-reporting, /etc/alloy/config.alloy]

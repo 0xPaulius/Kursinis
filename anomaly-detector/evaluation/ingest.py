@@ -18,13 +18,6 @@ import requests
 from .formatters import render_line, routed_jobs, stream_labels
 from .schema import Dataset
 
-# Alloy loki.source.file prideda `filename` etiketę pagal skaitomą failą (žr. config/alloy/collector.alloy).
-_FILENAMES = {
-    "syslog": "/var/log/syslog-ng/all.log",
-    "security": "/var/log/syslog-ng/security.log",
-    "errors": "/var/log/syslog-ng/errors.log",
-}
-
 
 def build_streams(ds: Dataset, dataset_label: str) -> dict[tuple, list[tuple[int, str]]]:
     streams: dict[tuple, list[tuple[int, str]]] = defaultdict(list)
@@ -41,8 +34,6 @@ def build_streams(ds: Dataset, dataset_label: str) -> dict[tuple, list[tuple[int
         base = stream_labels(ev)
         for job in routed_jobs(ev):
             labels = dict(base, job=job, dataset=dataset_label)
-            if job in _FILENAMES:
-                labels["filename"] = _FILENAMES[job]
             if job == "errors":
                 labels.pop("facility", None)  # errors job neturi facility etiketės
             streams[tuple(sorted(labels.items()))].append((ts_ns, line))

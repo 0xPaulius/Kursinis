@@ -4,8 +4,10 @@
 // Prideda labels (host, facility, severity, program) efektyviam filtravimui
 //
 // Sugeneruota: alloy convert --source-format=promtail config/promtail/promtail.yml
-// legacy_positions_file perima Promtail skaitymo pozicijas — po migracijos
-// failai neperskaitomi iš naujo (įrašai Loki nesidubliuoja).
+//
+// syslog-ng rašo po failą savaitės dienai (all-Mon.log ... all-Sun.log), todėl
+// skaitoma pagal šabloną. `filename` etiketė išmetama: ji kartotų `job` ir
+// kasdien kurtų naujus Loki srautus.
 ////////////////////////////////////////////////////////////////////
 
 // ---- Visi logai ----
@@ -27,6 +29,10 @@ loki.process "all_logs" {
 		}
 	}
 
+	stage.label_drop {
+		values = ["filename"]
+	}
+
 	stage.timestamp {
 		source   = "timestamp"
 		format   = "2006-01-02T15:04:05-07:00"
@@ -37,7 +43,7 @@ loki.process "all_logs" {
 loki.source.file "all_logs" {
 	targets = [{
 		__address__ = "localhost",
-		__path__    = "/var/log/syslog-ng/all.log",
+		__path__    = "/var/log/syslog-ng/all-*.log",
 		job         = "syslog",
 	}]
 	forward_to = [loki.process.all_logs.receiver]
@@ -45,7 +51,6 @@ loki.source.file "all_logs" {
 	file_match {
 		enabled = true
 	}
-	legacy_positions_file = "/var/lib/promtail/positions.yaml"
 }
 
 // ---- Saugumo logai (atskiras srautas su label) ----
@@ -65,6 +70,10 @@ loki.process "security_logs" {
 		}
 	}
 
+	stage.label_drop {
+		values = ["filename"]
+	}
+
 	stage.timestamp {
 		source   = "timestamp"
 		format   = "2006-01-02T15:04:05-07:00"
@@ -75,7 +84,7 @@ loki.process "security_logs" {
 loki.source.file "security_logs" {
 	targets = [{
 		__address__ = "localhost",
-		__path__    = "/var/log/syslog-ng/security.log",
+		__path__    = "/var/log/syslog-ng/security-*.log",
 		job         = "security",
 	}]
 	forward_to = [loki.process.security_logs.receiver]
@@ -83,7 +92,6 @@ loki.source.file "security_logs" {
 	file_match {
 		enabled = true
 	}
-	legacy_positions_file = "/var/lib/promtail/positions.yaml"
 }
 
 // ---- Klaidų logai ----
@@ -102,6 +110,10 @@ loki.process "error_logs" {
 		}
 	}
 
+	stage.label_drop {
+		values = ["filename"]
+	}
+
 	stage.timestamp {
 		source   = "timestamp"
 		format   = "2006-01-02T15:04:05-07:00"
@@ -112,7 +124,7 @@ loki.process "error_logs" {
 loki.source.file "error_logs" {
 	targets = [{
 		__address__ = "localhost",
-		__path__    = "/var/log/syslog-ng/errors.log",
+		__path__    = "/var/log/syslog-ng/errors-*.log",
 		job         = "errors",
 	}]
 	forward_to = [loki.process.error_logs.receiver]
@@ -120,7 +132,6 @@ loki.source.file "error_logs" {
 	file_match {
 		enabled = true
 	}
-	legacy_positions_file = "/var/lib/promtail/positions.yaml"
 }
 
 loki.write "default" {

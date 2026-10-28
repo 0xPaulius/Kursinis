@@ -5,8 +5,8 @@ atkartojamam vertinimui per loki-eval (atkartojamas RQ1/RQ2 scoringas be VM).
 
 Žingsniai:
   1. perskaito ground_truth.json (lab/collect_ground_truth.py);
-  2. iš gyvo Loki ištraukia visus {job=~"syslog|security|errors|windows"} įrašus
-     lange [min(start)-pad, max(end)+pad] (žingsniuojant, kad apeitų 5000 ribą);
+  2. iš gyvo Loki ištraukia visus {job=~"syslog|security|errors|windows|linux_endpoint"}
+     įrašus lange [min(start)-pad, max(end)+pad] (žingsniuojant, kad apeitų 5000 ribą);
   3. įrašo datasets/lab/<dataset>/events.jsonl (ts_ns, labels, line) — archyvui;
   4. įkelia juos į loki-eval su dataset="<dataset>" etikete;
   5. parašo eval meta.json (attack_intervals + attack_event_times iš intervalų),
@@ -30,7 +30,7 @@ from pathlib import Path
 import requests
 
 UTC = datetime.timezone.utc
-JOBS = '{job=~"syslog|security|errors|windows"}'
+JOBS = '{job=~"syslog|security|errors|windows|linux_endpoint"}'
 
 
 def _parse(ts: str) -> datetime.datetime:
@@ -38,29 +38,38 @@ def _parse(ts: str) -> datetime.datetime:
 
 
 def fetch_window(loki: str, start: datetime.datetime, end: datetime.datetime,
-                 step_minutes: int = 5) -> list[tuple[int, dict, str]]:
-    """Ištraukia visus įrašus [start,end] žingsniuojant po `step_minutes` (apeina 5000 ribą)."""
+                 step_minutes: int = 5, limit: int = 5000) -> list[tuple[int, dict, str]]:
+    """
+    Ištraukia visus įrašus [start,end] žingsniuojant po `step_minutes`. Jei žingsnis grąžino
+    `limit` įrašų (atsakymas nukirptas), tęsiama nuo naujausio gauto laiko — dublikatus
+    pašalina `seen`.
+    """
     session = requests.Session()
     url = loki.rstrip("/") + "/loki/api/v1/query_range"
     out: list[tuple[int, dict, str]] = []
     seen: set[tuple[int, str]] = set()
-    cur = start
-    step = datetime.timedelta(minutes=step_minutes)
-    while cur < end:
-        upper = min(cur + step, end)
+    cur_ns = int(start.timestamp() * 1e9)
+    end_ns = int(end.timestamp() * 1e9)
+    step_ns = step_minutes * 60 * 10**9
+    while cur_ns < end_ns:
+        upper_ns = min(cur_ns + step_ns, end_ns)
         resp = session.get(url, params={
-            "query": JOBS, "start": int(cur.timestamp() * 1e9),
-            "end": int(upper.timestamp() * 1e9), "limit": 5000, "direction": "forward",
+            "query": JOBS, "start": cur_ns, "end": upper_ns,
+            "limit": limit, "direction": "forward",
         }, timeout=60)
         resp.raise_for_status()
+        returned, newest = 0, cur_ns
         for stream in resp.json().get("data", {}).get("result", []):
             labels = stream.get("stream", {})
             for ts_ns, line in stream.get("values", []):
+                returned += 1
+                newest = max(newest, int(ts_ns))
                 key = (int(ts_ns), line)
                 if key not in seen:
                     seen.add(key)
                     out.append((int(ts_ns), labels, line))
-        cur = upper
+        # Nukirptas atsakymas: tęsti nuo naujausio laiko (jei jis nepasistūmėjo — +1 ns).
+        cur_ns = (max(newest, cur_ns + 1) if returned >= limit else upper_ns)
     out.sort(key=lambda r: r[0])
     return out
 

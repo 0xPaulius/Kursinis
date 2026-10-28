@@ -34,7 +34,8 @@ _MAX_FAILURES = int(os.getenv("LOGIN_MAX_FAILURES", "5"))
 _LOCKOUT_SECONDS = int(os.getenv("LOGIN_LOCKOUT_SECONDS", "300"))
 
 _store: UserStore | None = None
-# Nesėkmingi bandymai: raktas (vartotojas|IP) -> (skaičius, pirmo bandymo laikas).
+# Nesėkmingi bandymai: kliento IP -> (skaičius, pirmo bandymo laikas). Raktas — tik IP:
+# kitaip keičiant vartotojo vardą riba nesuveiktų, o kiekvienas bandymas vykdo lėtą scrypt.
 _failures: dict[str, tuple[int, float]] = {}
 
 
@@ -95,6 +96,15 @@ def verify_token(token: str) -> dict | None:
     return claims
 
 
+def verify_session(token: str) -> dict | None:
+    """verify_token + vartotojas vis dar egzistuoja ir turi tą pačią rolę (ištrintas ar
+    pažemintas vartotojas su dar galiojančiu tokenu atmetamas)."""
+    claims = verify_token(token)
+    if claims is None or get_user_store().role(str(claims.get("u", ""))) != claims.get("r"):
+        return None
+    return claims
+
+
 def _check_throttle(key: str) -> None:
     record = _failures.get(key)
     if record and record[0] >= _MAX_FAILURES and time.time() - record[1] < _LOCKOUT_SECONDS:
@@ -128,8 +138,7 @@ async def login(body: LoginRequest, request: Request) -> LoginResponse:
     if not body.username or not body.password:
         raise HTTPException(status_code=400, detail="Vartotojo vardas ir slaptažodis privalomi")
 
-    client_ip = request.client.host if request.client else "?"
-    key = f"{body.username}|{client_ip}"
+    key = request.client.host if request.client else "?"
     _check_throttle(key)
 
     role = get_user_store().verify(body.username, body.password)

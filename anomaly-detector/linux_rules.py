@@ -1,11 +1,16 @@
 """
-Linux endpoint telemetrijos taisyklės (job="linux_endpoint"): auditd įrašai,
-surinkti Alloy agento (lab/linux/config.alloy), susieti su MITRE ATT&CK.
+Linux endpoint telemetrijos taisyklės: auditd įrašai, susieti su MITRE ATT&CK.
 
-auditd eilutės yra key=value formato, pvz.:
-  type=USER_AUTH msg=audit(1699...:42): pid=1 uid=1000 acct="root" exe="/usr/bin/sudo" res=failed
-  type=ADD_USER  msg=audit(...): ... acct="backdoor" exe="/usr/sbin/useradd" res=success
+Įrašai ateina dviem keliais, abu skaitomi viena užklausa:
+  - be agento: auditd syslog įskiepis -> rsyslog (TLS 6514) -> syslog-ng, job="syslog";
+  - Alloy agentas, skaitantis /var/log/audit/audit.log, job="linux_endpoint".
+
+auditd eilutės yra key=value formato; userspace įrašai (PAM, shadow-utils) savo
+laukus apgaubia msg='...', pvz.:
+  type=USER_AUTH msg=audit(...): ... msg='op=PAM:authentication acct="root" exe="/usr/bin/sudo" ... res=failed'
+  type=ADD_USER  msg=audit(...): ... msg='op=add-user acct="backdoor" exe="/usr/sbin/useradd" ... res=success'
   type=EXECVE    msg=audit(...): argc=2 a0="bash" a1="-i"
+Per syslog prieš įrašą dar yra syslog-ng antraštė (`... user.info audisp-syslog[812]: type=...`).
 
 host imamas iš Loki etiketės (auditd eilutėje jo nėra). Taisyklės skaito tik
 laukus (ne lokalizuotą tekstą), todėl nepriklauso nuo kalbos.
@@ -21,14 +26,20 @@ from typing import Optional
 import attack_catalog
 from common import SAMPLE_LINE_LIMIT, Alert, LokiClient, Selectors, utcnow
 
-_KV_RE = re.compile(r'(\w+)=("(?:[^"\\]|\\.)*"|\S+)')
+# Nekabutinė reikšmė baigiasi ties tarpu arba viengube kabute: kitaip msg='...' apgaubtas
+# paskutinis laukas būtų res=failed', o pirmasis (op=...) susilietų su msg.
+_KV_RE = re.compile(r"""(\w+)=("(?:[^"\\]|\\.)*"|[^\s']+)""")
 _SUDO_EXES = ("sudo", "su", "pkexec")
 _DISCOVERY = {"whoami", "id", "uname", "hostname", "netstat", "ss", "ip", "ifconfig",
               "arp", "last", "w", "who", "ps", "lsof", "getent"}
-# Reverse shell / įtartini vykdymo šablonai (T1059.004)
+# Reverse shell / įtartini vykdymo šablonai (T1059.004). Shell ir nc tikrinami kaip pati
+# paleista programa — kitaip `ssh -i`, `rsync -e ssh`, `sed -i … sshd_config` atrodo įtartini.
 _SUSPICIOUS_EXEC = re.compile(
-    r"(?i)(-i\b.*(bash|sh|zsh)|(bash|sh|zsh)\b.*-i|/dev/tcp/|nc\b.*-e|ncat\b.*-e|"
+    r"(?i)(^(\S*/)?(ba|z)?sh\s(.*\s)?-i\b|/dev/tcp/|(^|/)(nc|ncat)\b.*-e|"
     r"socket\.socket|pty\.spawn|base64\s+-d|curl\b.*\|\s*(bash|sh)|wget\b.*\|\s*(bash|sh))")
+# Užklausa grąžina tik taisyklių įrašų tipus: journal + auditd srautas kitaip viršija
+# query_range 5000 eilučių ribą ir agregacijos mato tik paskutines sekundes.
+_RULE_TYPES_FILTER = '|~ "type=(USER_AUTH|USER_LOGIN|ADD_USER|USER_MGMT|EXECVE) "'
 
 SUDO_FAILURE_THRESHOLD = 3     # nesėkmingi sudo/su per host+user
 DISCOVERY_BURST_THRESHOLD = 4  # skirtingos žvalgybos komandos per host
@@ -62,7 +73,7 @@ def parse_audit(line: str, host: str = "unknown") -> Optional[AuditEvent]:
 
 
 class LinuxEndpointRuleDetector:
-    """Taisyklėmis pagrįstas aptikimas Linux endpoint telemetrijai (job="linux_endpoint")."""
+    """Taisyklėmis pagrįstas aptikimas Linux auditd įrašams (job="linux_endpoint" arba "syslog")."""
 
     def __init__(self, loki: LokiClient, selectors: Optional[Selectors] = None):
         self.loki = loki
@@ -79,7 +90,8 @@ class LinuxEndpointRuleDetector:
     def check(self, window_minutes: int = 5, now: Optional[datetime.datetime] = None) -> list[Alert]:
         now = now or utcnow()
         start = now - datetime.timedelta(minutes=window_minutes)
-        entries = self.loki.query_range(self.sel.linux_endpoint, start=start, end=now)
+        entries = self.loki.query_range(f"{self.sel.linux_audit} {_RULE_TYPES_FILTER}",
+                                        start=start, end=now)
         events = []
         for e in entries:
             ev = parse_audit(e["line"], e.get("labels", {}).get("host", "unknown"))
@@ -102,11 +114,12 @@ class LinuxEndpointRuleDetector:
             acct = ev.fields.get("acct", "?")
             out.append(self._alert(now, "linux_account_created", "medium",
                 f"Sukurta nauja Linux paskyra '{acct}' ({ev.host})",
-                host=ev.host, details={"acct": acct}, sample=ev.raw))
+                host=ev.host, details={"acct": acct, "key": acct}, sample=ev.raw))
         if ev.type == "EXECVE" and ev.command and _SUSPICIOUS_EXEC.search(ev.command):
+            command = ev.command[:400]
             out.append(self._alert(now, "linux_suspicious_execve", "high",
                 f"Įtartina komanda host'e {ev.host}: {ev.command[:160]}",
-                host=ev.host, details={"command": ev.command[:400]}, sample=ev.raw))
+                host=ev.host, details={"command": command, "key": command}, sample=ev.raw))
         return out
 
     def _sudo_failures(self, events, now, window_minutes) -> list[Alert]:

@@ -16,3 +16,4 @@ datasets/
 eval-results/
 certs/*
 !certs/.gitkeep
+config/syslog-ng/conf.d/tls.conf

@@ -32,6 +32,25 @@ def auth(tmp_path, monkeypatch):
 
 # -- UserStore ---------------------------------------------------------------
 
+def test_production_scrypt_strength_hashes(monkeypatch):
+    """conftest sumažina SCRYPT_N; čia tikrinamas numatytasis N=2**15 (be env)."""
+    monkeypatch.delenv("SCRYPT_N", raising=False)
+    from app.services import user_store
+    importlib.reload(user_store)
+    try:
+        assert user_store._SCRYPT_N == 2 ** 15
+        assert len(user_store._hash_password("s3cret", b"0" * 16)) == 64
+    finally:
+        monkeypatch.setenv("SCRYPT_N", "1024")
+        importlib.reload(user_store)
+
+
+def test_user_added_by_another_process_can_log_in(store, tmp_path):
+    other = UserStore(tmp_path / "users.json")   # pvz. manage_users CLI
+    other.set_user("bob", "pw-bob", "viewer")
+    assert store.verify("bob", "pw-bob") == "viewer"
+
+
 def test_passwords_hashed_not_plaintext(store, tmp_path):
     store.set_user("alice", "s3cret", "admin")
     raw = (tmp_path / "users.json").read_text()

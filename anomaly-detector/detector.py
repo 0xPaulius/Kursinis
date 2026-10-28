@@ -253,6 +253,10 @@ class StatisticalDetector:
         # (laiko žyma, reikšmė) — baseline'as apribojamas laiku, ne ciklų skaičiumi
         self.baseline_history: deque[tuple[float, float]] = deque()
         self.baseline_window_hours = BASELINE_WINDOW_HOURS
+        # Kiek istorijos (laiku) reikia prieš vertinant šuolį. Gretimų ciklų 5 min langai
+        # beveik sutampa, tad kelių minučių istorijos std per mažas ir paprastas svyravimas
+        # atrodo kaip šuolis (CHECK_INTERVAL=5 -> 5 įrašai = 25 s).
+        self.baseline_warmup_hours = 1.0
 
     def _update_baseline(self, now: datetime.datetime, current_value: float):
         """Atnaujina baseline istoriją ir išmeta senesnius nei langas įrašus."""
@@ -279,13 +283,14 @@ class StatisticalDetector:
         # Kiekis skaičiuojamas Loki pusėje — eilučių atsisiuntimas būtų apribotas 5000.
         current_count = self._count(stream, window_minutes, now)
 
-        # Reikia bent 5 istorinių įrašų PRIEŠ dabartinį tikrinimą — kitaip
-        # standartinis nuokrypis neturi prasmės. Baseline atnaujiname po
-        # tikrinimo, kad gate'as būtų tikslus.
-        if len(self.baseline_history) < 5:
+        # Vertiname tik turėdami ≥5 įrašus ir bent baseline_warmup_hours istorijos (arba visą
+        # langą, jei jis trumpesnis). Baseline atnaujiname po tikrinimo, kad gate'as būtų tikslus.
+        warmup_s = min(self.baseline_warmup_hours, self.baseline_window_hours) * 3600
+        span_s = now.timestamp() - self.baseline_history[0][0] if self.baseline_history else 0.0
+        if len(self.baseline_history) < 5 or span_s < warmup_s:
             logger.info(
-                f"Renkamas baseline: {len(self.baseline_history)}/5 "
-                f"(dabartinis: {current_count:.0f})"
+                f"Renkamas baseline: {len(self.baseline_history)} įrašų, "
+                f"{span_s / 60:.0f}/{warmup_s / 60:.0f} min (dabartinis: {current_count:.0f})"
             )
             self._update_baseline(now, current_count)
             return alerts
@@ -585,7 +590,7 @@ class Engine:
         self.stat_detector = StatisticalDetector(loki, selectors)
         # Windows endpoint taisyklės (job="windows"). Jei endpoint'ų nėra, srautas tuščias.
         self.windows_detector = WindowsRuleDetector(loki, selectors) if enable_windows else None
-        # Linux endpoint taisyklės (job="linux_endpoint", auditd). Jei endpoint'ų nėra, srautas tuščias.
+        # Linux auditd taisyklės (job="linux_endpoint" arba per rsyslog "syslog"). Be įrašų — tylu.
         self.linux_detector = LinuxEndpointRuleDetector(loki, selectors) if enable_linux else None
         # ML sluoksnis gyvame cikle numatytai išjungtas (ENABLE_ML=false) — jis per dažnai
         # keldavo bendrinius „neįprasto elgesio" alertus (per daug klaidingų teigiamų).
@@ -608,7 +613,7 @@ class Engine:
             alerts.extend(self.rule_detector.check_unauthorized_access(now=now))
             alerts.extend(self.rule_detector.check_firewall_events(now=now))
 
-            # 2. Endpoint taisyklės (job="windows" / "linux_endpoint")
+            # 2. Endpoint taisyklės (Windows job="windows"; Linux auditd "linux_endpoint" / "syslog")
             if self.windows_detector is not None:
                 alerts.extend(self.windows_detector.check(now=now))
             if self.linux_detector is not None:
@@ -639,7 +644,10 @@ class Engine:
         new_alerts = []
         suppressed = 0
         for alert in alerts:
-            key = f"{alert.alert_type}:{alert.source_ip}:{alert.source_host}"
+            # details["key"] — vieno įvykio tapatybė (paskyra, komanda...): skirtingi to paties
+            # tipo įvykiai tame pačiame host'e neturi vienas kito nuslopinti.
+            key = (f"{alert.alert_type}:{alert.source_ip}:{alert.source_host}:"
+                   f"{alert.details.get('key', '')}")
             if now_ts - self._cooldown.get(key, 0.0) >= self.cooldown_seconds:
                 self._cooldown[key] = now_ts
                 new_alerts.append(alert)
@@ -777,9 +785,9 @@ def main():
     while not shutdown_requested:
         logger.info(f"--- Tikrinimo ciklas #{engine.iteration + 1} ---")
 
-        # Heartbeat failas healthcheck'ui
+        # Heartbeat failas healthcheck'ui ir dashboard'o būklės skydeliui (bendras /data volume)
         try:
-            with open("/tmp/detector.alive", "w"):
+            with open(os.path.join(DATA_DIR, "detector.alive"), "w"):
                 pass
         except OSError:
             pass

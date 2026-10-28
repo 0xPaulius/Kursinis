@@ -7,91 +7,7 @@
 <script src="/static/js/tailwind.min.js"></script>
 <link rel="stylesheet" href="/static/fonts/fonts.css">
 <link rel="stylesheet" href="/static/css/style.css">
-<script>
-tailwind.config = {
-  darkMode: "class",
-  theme: {
-    extend: {
-      colors: {
-        // Paviršiai / neutralios spalvos (Material 3 light)
-        "surface":                  "#fbf8ff",
-        "surface-dim":              "#dad9e3",
-        "surface-bright":           "#fbf8ff",
-        "surface-container-lowest": "#ffffff",
-        "surface-container-low":    "#f4f2fd",
-        "surface-container":        "#eeedf7",
-        "surface-container-high":   "#e8e7f1",
-        "surface-container-highest":"#e3e1ec",
-        "on-surface":               "#1a1b22",
-        "on-surface-variant":       "#47464a",
-        "outline":                  "#78767b",
-        "outline-variant":          "#c8c5ca",
-        "background":               "#fbf8ff",
-        "on-background":            "#1a1b22",
-        "inverse-surface":          "#2f3038",
-        "inverse-on-surface":       "#f1effa",
-        // Pirminė (juoda)
-        "primary":                  "#000000",
-        "on-primary":               "#ffffff",
-        "primary-container":        "#1c1b1d",
-        "on-primary-container":     "#858386",
-        "primary-fixed":            "#e5e1e4",
-        "primary-fixed-dim":        "#c8c6c8",
-        // Antrinė (žalia)
-        "secondary":                "#006c4a",
-        "on-secondary":             "#ffffff",
-        "secondary-container":      "#82f5c1",
-        "on-secondary-container":   "#00714e",
-        "secondary-fixed":          "#85f8c4",
-        "secondary-fixed-dim":      "#68dba9",
-        // Tretinė — paliekama gintarinė „medium" pavojaus lygiui
-        "tertiary-fixed":           "#ffddb8",
-        "tertiary-fixed-dim":       "#ffb95f",
-        "on-tertiary-container":    "#b87500",
-        "on-tertiary-fixed":        "#2a1700",
-        // Klaida (raudona)
-        "error":                    "#ba1a1a",
-        "on-error":                 "#ffffff",
-        "error-container":          "#ffdad6",
-        "on-error-container":       "#93000a",
-      },
-      fontFamily: {
-        headline:    ["Manrope","sans-serif"],
-        body:        ["Inter","sans-serif"],
-        label:       ["Inter","sans-serif"],
-        "data-mono": ["JetBrains Mono","ui-monospace","SFMono-Regular","monospace"],
-      },
-      borderRadius: {
-        DEFAULT: "0.25rem",
-        lg: "0.5rem",
-        xl: "0.75rem",
-        "2xl": "1rem",
-        full: "9999px",
-      },
-      spacing: {
-        sidebar_width: "240px",
-        topbar_height: "56px",
-        gutter: "24px",
-        container_padding: "32px",
-        stack_sm: "8px",
-        stack_md: "16px",
-        stack_lg: "24px",
-        base: "8px",
-      },
-      fontSize: {
-        "label-md":    ["12px", {"lineHeight":"16px","letterSpacing":"0.05em","fontWeight":"500"}],
-        "headline-sm": ["18px", {"lineHeight":"28px","letterSpacing":"-0.01em","fontWeight":"600"}],
-        "headline-md": ["24px", {"lineHeight":"32px","letterSpacing":"-0.02em","fontWeight":"600"}],
-        "headline-lg": ["30px", {"lineHeight":"36px","letterSpacing":"-0.02em","fontWeight":"600"}],
-        "body-md":     ["14px", {"lineHeight":"20px"}],
-        "body-lg":     ["16px", {"lineHeight":"24px"}],
-        "body-sm":     ["12px", {"lineHeight":"16px"}],
-        "data-mono":   ["13px", {"lineHeight":"16px"}],
-      },
-    },
-  },
-}
-</script>
+<script src="/static/js/tailwind.config.js"></script>
 <style>
   .material-symbols-outlined { font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24; }
   .ms-fill { font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24; }
@@ -123,23 +39,23 @@ tailwind.config = {
 
   <!-- Navigation -->
   <nav class="flex-1 space-y-1">
-    <button class="nav-btn active" id="nav-dashboard" onclick="navigate('dashboard')">
+    <button class="nav-btn active" id="nav-dashboard" data-nav="dashboard">
       <span class="material-symbols-outlined nav-icon text-[20px]">dashboard</span>
       <span id="nav-label-dashboard" class="text-label-md font-label">Apžvalga</span>
     </button>
-    <button class="nav-btn" id="nav-anomalies" onclick="navigate('anomalies')">
+    <button class="nav-btn" id="nav-anomalies" data-nav="anomalies">
       <span class="material-symbols-outlined nav-icon text-[20px]">warning</span>
       <span id="nav-label-anomalies" class="text-label-md font-label">Anomalijos</span>
     </button>
-    <button class="nav-btn" id="nav-devices" onclick="navigate('devices')">
+    <button class="nav-btn" id="nav-devices" data-nav="devices">
       <span class="material-symbols-outlined nav-icon text-[20px]">router</span>
       <span id="nav-label-devices" class="text-label-md font-label">Įrenginiai</span>
     </button>
-    <button class="nav-btn" id="nav-attack" onclick="navigate('attack')">
+    <button class="nav-btn" id="nav-attack" data-nav="attack">
       <span class="material-symbols-outlined nav-icon text-[20px]">shield</span>
       <span id="nav-label-attack" class="text-label-md font-label">ATT&CK aprėptis</span>
     </button>
-    <button class="nav-btn" id="nav-messages" onclick="navigate('messages')">
+    <button class="nav-btn" id="nav-messages" data-nav="messages">
       <span class="material-symbols-outlined nav-icon text-[20px]">notifications_active</span>
       <span id="nav-label-messages" class="text-label-md font-label">Pranešimai</span>
     </button>
@@ -147,7 +63,7 @@ tailwind.config = {
 
   <!-- Footer -->
   <div class="mt-auto pt-4 border-t border-outline-variant">
-    <button onclick="toggleLang()" id="lang-btn"
+    <button id="lang-btn"
       class="nav-btn">
       <span class="material-symbols-outlined nav-icon text-[20px]">translate</span>
       <span>EN</span>
@@ -179,8 +95,7 @@ tailwind.config = {
     <div class="w-8 h-8 rounded-full bg-surface-container-high border border-outline-variant flex items-center justify-center shrink-0">
       <span class="material-symbols-outlined text-on-surface-variant text-[20px]">person</span>
     </div>
-    <button id="logout-btn" onclick="logout()"
-      class="flex items-center gap-1 px-3 py-1.5 rounded-lg text-label-md font-label font-bold uppercase text-on-surface-variant hover:bg-surface-container-high transition"
+    <button id="logout-btn"      class="flex items-center gap-1 px-3 py-1.5 rounded-lg text-label-md font-label font-bold uppercase text-on-surface-variant hover:bg-surface-container-high transition"
       title="Atsijungti">
       <span class="material-symbols-outlined text-[18px]">logout</span>
     </button>
@@ -201,8 +116,7 @@ tailwind.config = {
         <p id="overview-subtitle" class="text-body-md font-body text-on-surface-variant">Sistemos našumas ir aktyvaus stebėjimo rodikliai.</p>
       </div>
       <div class="relative">
-        <button id="range-btn" onclick="toggleRangeMenu(event)"
-          class="px-4 py-2 bg-surface-container-lowest border border-outline-variant text-on-surface text-label-md font-label rounded-lg flex items-center gap-2 hover:border-outline transition">
+        <button id="range-btn"          class="px-4 py-2 bg-surface-container-lowest border border-outline-variant text-on-surface text-label-md font-label rounded-lg flex items-center gap-2 hover:border-outline transition">
           <span class="material-symbols-outlined text-[18px]">schedule</span>
           <span id="range-label">Paskutinės 24 valandos</span>
           <span class="material-symbols-outlined text-[18px]">expand_more</span>
@@ -264,7 +178,7 @@ tailwind.config = {
       <div class="bg-surface-container-lowest border border-outline-variant rounded-lg p-stack_md">
         <div class="flex justify-between items-center mb-6">
           <h3 id="key-events-title" class="text-headline-sm font-headline text-primary">Svarbiausi įvykiai</h3>
-          <button onclick="navigate('anomalies')"
+          <button data-nav="anomalies"
             class="text-on-surface-variant hover:text-primary transition-colors text-label-md font-label font-semibold flex items-center gap-1">
             <span id="view-all-label">Žiūrėti visus</span>
             <span class="material-symbols-outlined text-[16px]">arrow_forward</span>
@@ -284,8 +198,7 @@ tailwind.config = {
             <h3 id="network-activity-title" class="text-headline-sm font-headline text-primary">Tinklo aktyvumas</h3>
             <p id="last-24h-label" class="text-label-md font-label text-on-surface-variant uppercase tracking-wider">Paskutinės 24 valandos</p>
           </div>
-          <select id="traffic-device-select" onchange="onTrafficDeviceChange()"
-            class="text-label-md font-label bg-surface-container-lowest border border-outline-variant rounded-lg px-3 py-1.5 outline-none focus:border-primary max-w-[200px] truncate">
+          <select id="traffic-device-select"            class="text-label-md font-label bg-surface-container-lowest border border-outline-variant rounded-lg px-3 py-1.5 outline-none focus:border-primary max-w-[200px] truncate">
             <option value="">Visi įrenginiai</option>
           </select>
         </div>
@@ -376,11 +289,10 @@ tailwind.config = {
           <p id="logs-subtitle" class="text-label-md font-label text-on-surface-variant uppercase tracking-wider">Naujausi aptikti sistemos žurnalo įrašai</p>
         </div>
         <div class="flex items-center gap-2">
-          <select id="logs-host-select" onchange="onLogsHostChange()"
-            class="text-label-md font-label bg-surface-container-lowest border border-outline-variant rounded-lg px-3 py-1.5 outline-none focus:border-primary max-w-[200px] truncate">
+          <select id="logs-host-select"            class="text-label-md font-label bg-surface-container-lowest border border-outline-variant rounded-lg px-3 py-1.5 outline-none focus:border-primary max-w-[200px] truncate">
             <option value="">Visi įrenginiai</option>
           </select>
-          <button id="logs-refresh-btn" onclick="loadRawLogs()" title="Atnaujinti"
+          <button id="logs-refresh-btn" title="Atnaujinti"
             class="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-outline-variant text-on-surface-variant hover:bg-surface-container-high transition">
             <span class="material-symbols-outlined text-[18px]">refresh</span>
           </button>
@@ -400,19 +312,18 @@ tailwind.config = {
       <div class="flex items-center gap-stack_sm">
         <!-- Atakų parinkiklis (demonstracijai) -->
         <div class="relative">
-          <button id="attack-btn" onclick="toggleAttackMenu(event)"
-            class="flex items-center gap-2 px-4 py-2 bg-error text-on-error rounded-lg text-label-md font-label font-bold hover:opacity-90 transition disabled:opacity-50">
+          <button id="attack-btn"            class="flex items-center gap-2 px-4 py-2 bg-error text-on-error rounded-lg text-label-md font-label font-bold hover:opacity-90 transition disabled:opacity-50">
             <span class="material-symbols-outlined text-[18px]">bug_report</span>
             <span id="attack-btn-label">Paleisti ataką</span>
             <span class="material-symbols-outlined text-[18px]">expand_more</span>
           </button>
           <div id="attack-menu" class="hidden absolute right-0 mt-1 w-72 bg-surface-container-lowest border border-outline-variant rounded-lg shadow-lg z-50 py-1">
-            <button onclick="runAttack('ssh_bruteforce')"
+            <button data-attack="ssh_bruteforce"
               class="w-full text-left px-4 py-2 text-label-md font-label text-on-surface hover:bg-surface-container-high transition-colors flex items-center gap-2.5 leading-snug">
               <span class="material-symbols-outlined text-[18px] text-error">login</span>
               <span id="attack-ssh-label">SSH slaptažodžių ataka</span>
             </button>
-            <button onclick="runAttack('firewall_spike')"
+            <button data-attack="firewall_spike"
               class="w-full text-left px-4 py-2 text-label-md font-label text-on-surface hover:bg-surface-container-high transition-colors flex items-center gap-2.5 leading-snug">
               <span class="material-symbols-outlined text-[18px] text-error">shield</span>
               <span id="attack-firewall-label">Ugniasienės / prievadų skenavimas</span>
@@ -420,13 +331,16 @@ tailwind.config = {
           </div>
         </div>
         <!-- ML detektoriaus testas (pilnas scenarijus) -->
-        <button id="devices-demo-btn" onclick="runAttackDemo()"
-          class="flex items-center gap-2 px-4 py-2 bg-surface-container-lowest border border-outline-variant text-on-surface rounded-lg text-label-md font-label font-bold hover:border-outline transition disabled:opacity-50">
+        <button id="devices-demo-btn"          class="flex items-center gap-2 px-4 py-2 bg-surface-container-lowest border border-outline-variant text-on-surface rounded-lg text-label-md font-label font-bold hover:border-outline transition disabled:opacity-50">
           <span class="material-symbols-outlined text-[18px]">smart_toy</span>
           <span id="devices-demo-btn-label">Testuoti ML detektorių</span>
         </button>
-        <button id="devices-add-btn" onclick="openAddDeviceModal()"
-          class="flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded-lg text-label-md font-label font-bold hover:opacity-90 transition">
+        <!-- Tikro kompiuterio prijungimo instrukcija (įrenginio nekuria) -->
+        <button id="devices-connect-btn"          class="flex items-center gap-2 px-4 py-2 bg-surface-container-lowest border border-outline-variant text-on-surface rounded-lg text-label-md font-label font-bold hover:border-outline transition">
+          <span class="material-symbols-outlined text-[18px]">computer</span>
+          <span id="devices-connect-btn-label">Prijungti kompiuterį</span>
+        </button>
+        <button id="devices-add-btn"          class="flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded-lg text-label-md font-label font-bold hover:opacity-90 transition">
           <span class="material-symbols-outlined text-[18px]">add</span>
           <span id="devices-add-btn-label">Pridėti įrenginį</span>
         </button>
@@ -532,10 +446,8 @@ tailwind.config = {
 
       <!-- Veiksmai -->
       <div class="flex items-center gap-3 pt-1 flex-wrap">
-        <button id="notify-save-btn" onclick="saveNotificationSettings()"
-          class="px-5 py-2 bg-primary text-on-primary rounded-lg text-label-md font-label font-bold hover:opacity-90 transition">Išsaugoti</button>
-        <button id="notify-test-btn" onclick="testNotification()"
-          class="px-5 py-2 rounded-lg text-label-md font-label font-bold border border-outline-variant text-on-surface hover:bg-surface-container-high transition">Siųsti testą</button>
+        <button id="notify-save-btn"          class="px-5 py-2 bg-primary text-on-primary rounded-lg text-label-md font-label font-bold hover:opacity-90 transition">Išsaugoti</button>
+        <button id="notify-test-btn"          class="px-5 py-2 rounded-lg text-label-md font-label font-bold border border-outline-variant text-on-surface hover:bg-surface-container-high transition">Siųsti testą</button>
         <span id="notify-status" class="text-body-md font-label"></span>
       </div>
     </div>
@@ -559,14 +471,14 @@ tailwind.config = {
 </main>
 
 <!-- ======================== ĮRENGINIO MODALAS ======================== -->
-<div id="device-modal" class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-on-surface/40 p-4" onclick="onDeviceModalBackdrop(event)">
+<div id="device-modal" class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-on-surface/40 p-4">
   <div class="bg-surface-container-lowest border border-outline-variant rounded-2xl w-full max-w-lg overflow-hidden">
 
     <!-- Forma -->
     <div id="device-modal-form">
       <div class="flex justify-between items-center px-6 py-4 border-b border-outline-variant">
         <h3 id="device-modal-title" class="text-headline-sm font-headline text-primary">Pridėti naują įrenginį</h3>
-        <button onclick="closeDeviceModal()" class="text-on-surface-variant hover:text-on-surface transition">
+        <button data-close="device-modal" class="text-on-surface-variant hover:text-on-surface transition">
           <span class="material-symbols-outlined">close</span>
         </button>
       </div>
@@ -592,10 +504,9 @@ tailwind.config = {
         <p id="dev-form-error" class="hidden text-error text-body-md font-label"></p>
       </div>
       <div class="flex justify-end gap-3 px-6 py-4 border-t border-outline-variant">
-        <button id="dev-cancel-btn" onclick="closeDeviceModal()"
+        <button id="dev-cancel-btn" data-close="device-modal"
           class="px-4 py-2 rounded-lg text-label-md font-label font-bold text-on-surface-variant hover:bg-surface-container-high transition">Atšaukti</button>
-        <button id="dev-save-btn" onclick="submitAddDevice()"
-          class="px-5 py-2 bg-primary text-on-primary rounded-lg text-label-md font-label font-bold hover:opacity-90 transition disabled:opacity-50">Pridėti</button>
+        <button id="dev-save-btn"          class="px-5 py-2 bg-primary text-on-primary rounded-lg text-label-md font-label font-bold hover:opacity-90 transition disabled:opacity-50">Pridėti</button>
       </div>
     </div>
 
@@ -603,15 +514,23 @@ tailwind.config = {
     <div id="device-modal-tutorial" class="hidden">
       <div class="flex justify-between items-center px-6 py-4 border-b border-outline-variant">
         <h3 id="device-tut-title" class="text-headline-sm font-headline text-primary flex items-center gap-2">
-          <span class="material-symbols-outlined text-secondary">check_circle</span>
+          <span id="device-tut-icon" class="material-symbols-outlined text-secondary">check_circle</span>
           <span id="device-tut-title-text">Įrenginys pridėtas</span>
         </h3>
-        <button onclick="closeDeviceModal()" class="text-on-surface-variant hover:text-on-surface transition">
+        <button data-close="device-modal" class="text-on-surface-variant hover:text-on-surface transition">
           <span class="material-symbols-outlined">close</span>
         </button>
       </div>
       <div class="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
         <p id="device-tut-intro" class="text-body-md text-on-surface-variant font-body leading-relaxed"></p>
+        <div id="device-tut-os-wrap" class="hidden">
+          <label id="device-tut-os-label" for="device-tut-os" class="block text-label-md font-label font-bold uppercase tracking-wider text-on-surface-variant mb-1.5">Operacinė sistema</label>
+          <select id="device-tut-os"            class="w-full px-4 py-2.5 bg-surface-container-lowest rounded-lg border border-outline-variant focus:border-primary focus:ring-0 text-body-md outline-none">
+            <option value="windows">Windows</option>
+            <option value="linux">Linux</option>
+            <option value="macos">macOS</option>
+          </select>
+        </div>
         <ol id="device-tut-steps" class="list-decimal list-inside space-y-2 text-body-md font-body"></ol>
         <div>
           <div id="device-tut-code-label" class="text-label-md font-label font-bold uppercase tracking-wider text-on-surface-variant mb-1.5">Greitas testas</div>
@@ -619,7 +538,7 @@ tailwind.config = {
         </div>
       </div>
       <div class="flex justify-end px-6 py-4 border-t border-outline-variant">
-        <button id="dev-done-btn" onclick="closeDeviceModal()"
+        <button id="dev-done-btn" data-close="device-modal"
           class="px-5 py-2 bg-primary text-on-primary rounded-lg text-label-md font-label font-bold hover:opacity-90 transition">Supratau</button>
       </div>
     </div>
@@ -628,14 +547,14 @@ tailwind.config = {
 </div>
 
 <!-- ======================== ĮRENGINIO INFORMACIJOS MODALAS ======================== -->
-<div id="device-info-modal" class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-on-surface/40 p-4" onclick="onDeviceInfoBackdrop(event)">
+<div id="device-info-modal" class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-on-surface/40 p-4">
   <div class="bg-surface-container-lowest border border-outline-variant rounded-2xl w-full max-w-md overflow-hidden">
     <div class="flex justify-between items-center px-6 py-4 border-b border-outline-variant">
       <h3 class="text-headline-sm font-headline text-primary flex items-center gap-2">
         <span id="device-info-status-dot" class="w-2.5 h-2.5 rounded-full bg-outline"></span>
         <span id="device-info-name">—</span>
       </h3>
-      <button onclick="closeDeviceInfo()" class="text-on-surface-variant hover:text-on-surface transition">
+      <button data-close="device-info-modal" class="text-on-surface-variant hover:text-on-surface transition">
         <span class="material-symbols-outlined">close</span>
       </button>
     </div>
@@ -655,7 +574,7 @@ tailwind.config = {
 </div>
 
 <!-- ======================== ANOMALIJOS INFORMACIJOS MODALAS ======================== -->
-<div id="alert-info-modal" class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-on-surface/40 p-4" onclick="onAlertInfoBackdrop(event)">
+<div id="alert-info-modal" class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-on-surface/40 p-4">
   <div class="bg-surface-container-lowest border border-outline-variant rounded-2xl w-full max-w-lg overflow-hidden">
     <div class="flex justify-between items-center px-6 py-4 border-b border-outline-variant">
       <h3 class="text-headline-sm font-headline text-primary flex items-center gap-2 min-w-0">
@@ -664,7 +583,7 @@ tailwind.config = {
         </span>
         <span id="alert-info-title" class="truncate">—</span>
       </h3>
-      <button onclick="closeAlertInfo()" class="text-on-surface-variant hover:text-on-surface transition shrink-0">
+      <button data-close="alert-info-modal" class="text-on-surface-variant hover:text-on-surface transition shrink-0">
         <span class="material-symbols-outlined">close</span>
       </button>
     </div>
@@ -723,6 +642,6 @@ tailwind.config = {
 </div>
 
 <script src="/static/js/chart.min.js"></script>
-<script src="/static/js/app.js"></script>
+<script type="module" src="/static/js/main.js"></script>
 </body>
 </html>

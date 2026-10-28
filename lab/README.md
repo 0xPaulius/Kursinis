@@ -10,7 +10,7 @@ valdomais duomenimis. Nereikia keisti kolektoriaus: VM siunčia į tą patį Doc
 |----|-----------|-----|----------|
 | `collector` | Docker stack (šis repo) | host | `docker compose --profile anomaly --profile endpoints up -d` |
 | `win11-lab` | Windows 11 darbo vieta | 4 GB | Sysmon + Alloy agentas (Security/Sysmon/PowerShell) |
-| `linux-target` | Linux serveris (taikinys) | 2 GB | sshd + rsyslog TLS |
+| `linux-target` | Linux serveris (taikinys) | 2 GB | sshd + rsyslog TLS + auditd (syslog įskiepis) |
 | `kali` | Atakuotojas | 2 GB | hydra, nmap |
 
 Tinklas: libvirt NAT (dažniausiai `192.168.122.0/24`), kolektorius pasiekiamas per
@@ -22,29 +22,34 @@ tilto adresą (`192.168.122.1`). Po paruošimo padarykite „clean" momentinę k
 ```bash
 tools/gen-certs.sh ca
 tools/gen-certs.sh server 192.168.122.1      # kolektoriaus SAN
-tools/gen-certs.sh client win11-lab          # -> certs/clients/win11-lab.{crt,key}
+tools/gen-certs.sh client win11-lab          # -> certs/clients/win11-lab.{crt,key}, įtraukiamas į šliuzo sąrašą
 cp config/syslog-ng/conf.d/tls.conf.example config/syslog-ng/conf.d/tls.conf
 docker compose --profile anomaly --profile endpoints up -d
+docker compose restart syslog-ng alloy-gateway   # jei stack'as jau veikė
 ```
 
 Į `win11-lab` nukopijuokite `certs/ca.crt`, `certs/clients/win11-lab.crt` (-> `client.crt`)
-ir `.key` (-> `client.key`) į `C:\kursinis-certs`.
+ir `.key` (-> `client.key`) į `C:\kursinis-certs`, į `linux-target` — `certs/ca.crt`
+(-> `/etc/ssl/certs/kursinis-ca.crt`). Į abi VM nukopijuokite repozitorijos `lab/` ir
+`onboarding/` katalogus (kartu, kaip repozitorijoje): VM paruošimas naudoja tuos pačius
+diegimo skriptus kaip realūs kompiuteriai (žr. pagrindinio README „Galinių įrenginių prijungimas").
 
 ## 2. VM paruošimas
 
 ```powershell
-# win11-lab (administratorius): Sysmon + audit + Alloy + Atomic Red Team
+# win11-lab (administratorius): onboarding/windows/install.ps1 (Sysmon, audit, Alloy) + Atomic Red Team
 powershell -ExecutionPolicy Bypass -File provision.ps1 -Collector 192.168.122.1 -CertDir C:\kursinis-certs
 #   RQ4 apkarpytai Sysmon konfigūracijai: pridėkite -Trim
 ```
 
 ```bash
-# linux-target (root): sshd + rsyslog TLS 6514
+# linux-target (root): sshd + onboarding/linux/setup.sh (rsyslog TLS 6514 + auditd syslog įskiepis)
 sudo COLLECTOR=192.168.122.1 CA_FILE=/etc/ssl/certs/kursinis-ca.crt ./linux/provision.sh
 ```
 
 Patikra: `collector` dashboard (`:8080`) Įrenginių skiltyje turi atsirasti `win11-lab`
-ir `linux-target`; Windows įrašai matomi su `{job="windows"}`.
+ir `linux-target`; Windows įrašai matomi su `{job="windows"}`, Linux auditd įrašai su
+`{job="syslog", host="linux-target"} |= "type="`.
 
 ## 3. Sintetinio srauto išjungimas
 
@@ -118,11 +123,11 @@ ir ar sistema telpa į <2 GB RAM tikslą.
 
 | Failas | Paskirtis |
 |--------|-----------|
-| `windows/provision.ps1` | Sysmon, auditpol, Script Block Logging, Alloy (mTLS), Atomic Red Team |
-| `windows/config.alloy` | Alloy agentas: Security/Sysmon/PowerShell -> gateway :3500 |
+| `windows/provision.ps1` | Paketas iš `-CertDir` -> `onboarding/windows/install.ps1` (Sysmon, auditpol, Script Block Logging, Alloy mTLS) + Atomic Red Team |
+| `../onboarding/windows/config.alloy` | Alloy agentas: Security/Sysmon/PowerShell -> gateway :3500 |
 | `windows/run-atomics.ps1` | ATT&CK technikos + Attire ground truth |
 | `windows/benign.ps1` | Gerybinė Windows veikla (FPR) |
-| `linux/provision.sh` | sshd + rsyslog TLS taikinyje |
+| `linux/provision.sh` | sshd + `onboarding/linux/setup.sh` (rsyslog TLS 6514 + auditd) taikinyje |
 | `linux/benign.sh` | Gerybinė Linux veikla (FPR) |
 | `kali/attacks.sh` | hydra/nmap atakos + ground truth |
 | `collect_ground_truth.py` | Sujungia ground truth failus |

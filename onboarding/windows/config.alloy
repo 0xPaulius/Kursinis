@@ -1,10 +1,12 @@
 ////////////////////////////////////////////////////////////////////
-// Grafana Alloy agentas Windows endpoint'e (laboratorijos darbo vieta)
+// Grafana Alloy agentas Windows kompiuteryje (įdiegia install.ps1)
 //
 // Skaito tris įvykių žurnalo kanalus ir siunčia į kolektoriaus šliuzą
 // (config/alloy/gateway.alloy, :3500) per TLS su kliento sertifikatu (mTLS).
 //
-// provision.ps1 pakeičia COLLECTOR, 3500 ir C:\kursinis-certs tikromis reikšmėmis.
+// Kolektoriaus adresą į url įrašo tools/gen-certs.sh bundle (laboratorijoje —
+// lab/windows/provision.ps1); sertifikatus install.ps1 nukopijuoja į
+// C:\ProgramData\Kursinis\certs.
 // Žymimas job="windows" (šliuzo allowlist jį praleidžia); host, channel — etiketės.
 // Likę laukai (event_id, event_data, message, levelText ...) lieka JSON eilutėje,
 // kurią parsina windows_rules.py detektoriuje.
@@ -57,10 +59,14 @@ loki.write "collector" {
 	endpoint {
 		url = "https://COLLECTOR:3500/loki/api/v1/push"
 
+		// 0 = kartoti, kol pristatoma (numatyta 10 bandymų, ~8 min., po to duomenys išmetami).
+		// Senesnių nei 7 d. įrašų Loki vis tiek nepriima.
+		max_backoff_retries = 0
+
 		tls_config {
-			ca_file   = "C:\\kursinis-certs\\ca.crt"
-			cert_file = "C:\\kursinis-certs\\client.crt"
-			key_file  = "C:\\kursinis-certs\\client.key"
+			ca_file   = "C:\\ProgramData\\Kursinis\\certs\\ca.crt"
+			cert_file = "C:\\ProgramData\\Kursinis\\certs\\client.crt"
+			key_file  = "C:\\ProgramData\\Kursinis\\certs\\client.key"
 		}
 	}
 }

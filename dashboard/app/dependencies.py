@@ -5,7 +5,7 @@ from __future__ import annotations
 
 from fastapi import Depends, Header, HTTPException, Request
 
-from app.routers.auth import verify_token
+from app.routers.auth import verify_session
 from app.services.alert_reader import AlertReader
 from app.services.device_monitor import DeviceMonitor
 from app.services.device_registry import DeviceRegistry
@@ -52,7 +52,7 @@ def require_auth(authorization: str | None = Header(default=None)) -> dict:
     token = authorization.strip()
     if token.lower().startswith("bearer "):
         token = token[7:].strip()
-    claims = verify_token(token)
+    claims = verify_session(token)
     if claims is None:
         raise HTTPException(status_code=401, detail="Neteisingas arba pasibaigęs tokenas")
     return claims

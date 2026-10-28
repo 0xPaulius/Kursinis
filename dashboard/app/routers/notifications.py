@@ -14,7 +14,7 @@ from app.dependencies import get_notifier, require_admin, require_auth
 from app.models.schemas import NotificationSettings
 from app.services.notifier import VALID_SEVERITIES, Notifier, is_valid_webhook
 
-# Skaitymas — bet kuriam prisijungusiam; keitimas/testas — tik admin (žr. maršrutus).
+# Visi maršrutai — tik admin: webhook URL yra slaptas (juo galima rašyti į komandos kanalą).
 router = APIRouter(
     prefix="/api/notifications",
     tags=["notifications"],
@@ -22,7 +22,7 @@ router = APIRouter(
 )
 
 
-@router.get("/settings", response_model=NotificationSettings)
+@router.get("/settings", response_model=NotificationSettings, dependencies=[Depends(require_admin)])
 async def get_settings(
     notifier: Annotated[Notifier, Depends(get_notifier)],
 ) -> NotificationSettings:

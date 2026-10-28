@@ -78,6 +78,7 @@ class DeviceCreate(BaseModel):
     ip: str
     os: str                         # "macos" | "windows"
     os_version: str | None = None   # optional override; defaults per OS
+    synthetic: bool = True          # False — real endpoint that sends its own logs
 
 
 class Device(BaseModel):
