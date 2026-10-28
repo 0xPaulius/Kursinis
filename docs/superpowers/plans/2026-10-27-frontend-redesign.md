@@ -363,7 +363,7 @@ Each task replaces one page section's markup with panels from spec §4.4–4.5 (
 
 **Files:** Modify `S/index.html`, `S/js/pages/overview.js`, `S/js/i18n.js`.
 
-- [ ] Controls row: device select `#traffic-device-select`, range button `#range-btn` + `#range-menu`, refresh `#refresh-btn` (calls `ctx.loadTrafficHistory()` and `ctx.loadTrafficCurrent()`), live status `#live-status`.
+- [ ] Controls row: device select `#traffic-device-select`, range button `#range-btn` + `#range-menu`, refresh `#refresh-btn` (calls `ctx.loadTrafficHistory()` and `ctx.loadTrafficCurrent()`). The live status `#live-status` sits in the top bar on every page since Task 11.
 - [ ] Row of four `.stat` panels: `#metric-logs-value`, `#metric-errors-value` (+ `#metric-errors-pct`), `#metric-rate-value`, `#hero-threats`. `renderMetrics` sets each value's color class by today's thresholds (spec §4.4) and draws `sparkline()` into `#metric-logs-spark` and `#metric-rate-spark` from the last 12 `state.history` counts. The Threats panel toggles `.stat-threat` (background `--threat-bg`) when the count is above 0. Drop `setMetricBadge`/`setBarWidth` and their badge elements.
 - [ ] Time-series panel (8 columns): canvas `#traffic-chart`, legend table `#traffic-legend` (average, maximum, last of `state.history`, filled with `textContent`), the `#traffic-device-stats` strip under it, plus totals `#chart-total` and `#chart-peak`.
 - [ ] **New** bar-gauge panel (4 columns) `#sev-breakdown`: `renderSeverityBreakdown()` counts `state.alerts` by severity and draws one row per severity (label, bar width relative to the largest count, count) with the `.sev-*` colors. Subtitle `data-i18n="last_20"`. Called from `render()`.

@@ -266,12 +266,14 @@ o rsyslog kaupia žurnalus diske (iki 1 GB). Po kelių minučių kompiuteris ats
 
 Papildoma žiniatinklio sąsaja šalia Grafana, pasiekiama per `http://localhost:8080`.
 
-- **Technologijos**: FastAPI + Uvicorn (backend), Vanilla JS + Tailwind CSS + Chart.js (frontend)
+- **Technologijos**: FastAPI + Uvicorn (backend), JS moduliai be surinkimo žingsnio + Tailwind CSS + Chart.js (frontend)
+- **Išvaizda**: Grafana stiliaus skydeliai; tamsi tema pagal nutylėjimą, šviesią galima įjungti viršutinėje juostoje (pasirinkimas įsimenamas naršyklėje)
 - **Kalba**: Lietuvių / Anglų (perjungiama UI)
 - **Prisijungimas**: admin / `$DASHBOARD_ADMIN_PASSWORD` (pirmas admin sukuriamas paleidus)
 - **Autentifikacija**: scrypt slaptažodžių maišos (`/state/users.json`), HMAC parašu pasirašyti galiojantys tokenai, rolės admin/viewer, bandymų ribojimas; vartotojų valdymas — `python -m app.manage_users`
 - **Funkcijos**: logų srauto stebėjimas, anomalijų peržiūra, įrenginių sąrašas ir žemėlapis, MITRE ATT&CK aprėpties skiltis, demonstracinės atakos, webhook pranešimai, paieška, sistemos būklė
 - **Gyvi atnaujinimai**: Server-Sent Events (`/api/stream`) — pultas atsinaujina realiu laiku be perkrovimo
+- **Atnaujinus iš senesnės versijos**: naršyklėje, kurioje buvo atidarytas senasis pultas, vieną kartą paspauskite Ctrl+Shift+R; vėlesni atnaujinimai įkeliami savaime
 
 ## Testavimas
 

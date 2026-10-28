@@ -1,11 +1,12 @@
 // Įrenginių puslapis: žemėlapis, lentelė, įrenginių langai, demonstracinės atakos.
 
-import { el, setText } from "../dom.js";
+import { closeDialog, el, openDialog, setText } from "../dom.js";
 import { state } from "../state.js";
 import { apiSend } from "../api.js";
 import { t } from "../i18n.js";
 import { numFmt, relTime } from "../format.js";
 import { filteredDevices, navigate } from "../shell.js";
+import { token } from "../charts.js";
 
 // main.js duomenų įkėlimo funkcijos (puslapiai main.js neimportuoja).
 let ctx = {};
@@ -43,9 +44,9 @@ export function renderDevicesPage() {
 }
 
 function deviceNodeColor(d) {
-  if (d.alert_count > 0) return "#ba1a1a";   // su įspėjimais
-  if (d.online)         return "#006c4a";    // aktyvus
-  return "#78767b";                          // neaktyvus
+  if (d.alert_count > 0) return token("--crit");   // su įspėjimais
+  if (d.online)         return token("--ok");      // aktyvus
+  return token("--text-dim");                      // neaktyvus
 }
 
 function renderDeviceMap() {
@@ -93,14 +94,14 @@ function renderDeviceMap() {
     const d = devices[i];
     const line = svgEl("line", {
       x1: cx, y1: cy, x2: p.x.toFixed(1), y2: p.y.toFixed(1),
-      stroke: d.online ? "#c8c5ca" : "#e3e1ec", "stroke-width": "2",
+      stroke: token(d.online ? "--text-dim" : "--line"), "stroke-width": "1.5",
     });
     if (!d.online) line.setAttribute("stroke-dasharray", "4 4");
     svg.appendChild(line);
   });
 
   // Kolektorius (centras)
-  const cCol = collectorOnline ? "#000000" : "#78767b";
+  const cCol = token(collectorOnline ? "--accent" : "--text-dim");
   const cg = svgEl("g", {});
   cg.appendChild(svgEl("circle", { cx, cy, r: "30", fill: cCol }));
   [-8, -1, 6].forEach(dy => {
@@ -109,7 +110,7 @@ function renderDeviceMap() {
   svg.appendChild(cg);
 
   const cLabel = svgEl("text", {
-    x: cx, y: cy + 48, "text-anchor": "middle", fill: "#1a1b22", "font-size": "11", "font-weight": "700",
+    x: cx, y: cy + 48, "text-anchor": "middle", fill: token("--text-strong"), "font-size": "11", "font-weight": "600",
   });
   cLabel.textContent = t("map_collector");
   svg.appendChild(cLabel);
@@ -122,7 +123,7 @@ function renderDeviceMap() {
     const g = svgEl("g", { class: "map-node", "data-idx": String(i), style: "cursor:pointer" });
     g.appendChild(svgEl("circle", {
       cx: p.x.toFixed(1), cy: p.y.toFixed(1), r: String(r),
-      fill: deviceNodeColor(d), opacity: d.online ? "1" : "0.55",
+      fill: deviceNodeColor(d),
     }));
     const countT = svgEl("text", {
       x: p.x.toFixed(1), y: (p.y + 1).toFixed(1), "text-anchor": "middle",
@@ -132,7 +133,7 @@ function renderDeviceMap() {
     g.appendChild(countT);
     const nameT = svgEl("text", {
       x: p.x.toFixed(1), y: (p.y + r + 14).toFixed(1), "text-anchor": "middle",
-      fill: "#1a1b22", "font-size": "11", "font-weight": "600",
+      fill: token("--text"), "font-size": "11", "font-weight": "500",
     });
     nameT.textContent = name;
     g.appendChild(nameT);
@@ -154,42 +155,38 @@ function renderDeviceTable() {
     const tr = document.createElement("tr");
     const td = document.createElement("td");
     td.colSpan = 7;
-    td.className = "px-6 py-8 text-center text-on-surface-variant text-sm font-label";
+    td.className = "empty";
     td.textContent = state.devices.length ? `0 ${state.lang === "lt" ? "rezultatų" : "results"}` : t("map_empty");
     tr.appendChild(td);
     tbody.appendChild(tr);
     return;
   }
 
-  devs.forEach((d, i) => {
+  devs.forEach(d => {
     const tr = document.createElement("tr");
-    tr.className = "border-b border-outline-variant/20 last:border-0 hover:bg-surface-container-low transition-colors cursor-pointer" +
-      (i % 2 === 1 ? " bg-surface-container-low/30" : "");
+    tr.className = "is-click";
     tr.addEventListener("click", () => openDeviceInfo(d));
 
     // Pavadinimas + šaltinio žyma
     const tdName = document.createElement("td");
-    tdName.className = "px-6 py-3";
     const nm = document.createElement("div");
-    nm.className = "font-semibold";
+    nm.className = "font-medium text-strong";
     nm.textContent = d.name;
     const src = document.createElement("div");
-    src.className = "text-[10px] uppercase tracking-wider font-label text-on-surface-variant";
+    src.className = "text-[11px] text-dim";
     src.textContent = (SRC_LABEL[d.source] || (() => d.source))();
     tdName.appendChild(nm);
     tdName.appendChild(src);
 
     // OS
     const tdOs = document.createElement("td");
-    tdOs.className = "px-6 py-3";
     const osMeta = OS_META[d.os] || OS_META.unknown;
     const osWrap = document.createElement("span");
-    osWrap.className = "inline-flex items-center gap-1.5 text-on-surface-variant";
+    osWrap.className = "inline-flex items-center gap-1.5 text-muted";
     const osIcon = document.createElement("span");
-    osIcon.className = "material-symbols-outlined text-base";
+    osIcon.className = "material-symbols-outlined text-[16px]";
     osIcon.textContent = osMeta.icon;
     const osText = document.createElement("span");
-    osText.className = "text-xs font-label";
     osText.textContent = osMeta.label();
     osWrap.appendChild(osIcon);
     osWrap.appendChild(osText);
@@ -197,12 +194,11 @@ function renderDeviceTable() {
 
     // IP / hostname
     const tdId = document.createElement("td");
-    tdId.className = "px-6 py-3 font-mono text-sm";
+    tdId.className = "mono";
     const ipLine = document.createElement("div");
-    ipLine.className = "font-medium";
     ipLine.textContent = d.ip || "—";
     const hostLine = document.createElement("div");
-    hostLine.className = "text-[11px] text-on-surface-variant";
+    hostLine.className = "text-[11px] text-dim";
     // Savo serverio realaus hostname nerodome (privatumas).
     hostLine.textContent = d.source === "self" ? "" : d.hostname;
     tdId.appendChild(ipLine);
@@ -210,11 +206,10 @@ function renderDeviceTable() {
 
     // Būsena
     const tdStatus = document.createElement("td");
-    tdStatus.className = "px-6 py-3";
     const stWrap = document.createElement("span");
-    stWrap.className = "inline-flex items-center gap-1.5 text-xs font-label";
+    stWrap.className = "inline-flex items-center gap-1.5";
     const dot = document.createElement("span");
-    dot.className = "w-2 h-2 rounded-full " + (d.online ? "bg-secondary" : "bg-outline");
+    dot.className = "app-dot" + (d.online ? " bg-ok" : "");
     const stTxt = document.createElement("span");
     stTxt.textContent = d.online ? t("dev_status_online") : t("dev_status_offline");
     stWrap.appendChild(dot);
@@ -223,24 +218,24 @@ function renderDeviceTable() {
 
     // Logai (5 min)
     const tdLogs = document.createElement("td");
-    tdLogs.className = "px-6 py-3 font-bold tabular-nums";
+    tdLogs.className = "mono";
     tdLogs.textContent = numFmt(d.logs_5m || 0);
 
     // Paskutinis logas
     const tdSeen = document.createElement("td");
-    tdSeen.className = "px-6 py-3 text-xs text-on-surface-variant font-label";
+    tdSeen.className = "text-muted";
     tdSeen.textContent = d.last_seen ? relTime(d.last_seen) : t("dev_never");
 
     // Veiksmai
     const tdActions = document.createElement("td");
-    tdActions.className = "px-6 py-3 text-right whitespace-nowrap";
+    tdActions.className = "text-right whitespace-nowrap";
     tdActions.addEventListener("click", e => e.stopPropagation());
 
     const infoBtn = document.createElement("button");
-    infoBtn.className = "inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold text-on-surface-variant hover:bg-surface-container transition font-label";
+    infoBtn.className = "btn btn-icon btn-ghost";
     infoBtn.title = t("dev_info");
     const infoIcon = document.createElement("span");
-    infoIcon.className = "material-symbols-outlined text-base";
+    infoIcon.className = "material-symbols-outlined";
     infoIcon.textContent = "info";
     infoBtn.appendChild(infoIcon);
     infoBtn.addEventListener("click", () => openDeviceInfo(d));
@@ -248,20 +243,20 @@ function renderDeviceTable() {
 
     if (d.source === "registered") {
       const tutBtn = document.createElement("button");
-      tutBtn.className = "inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold text-on-surface-variant hover:bg-surface-container transition font-label ml-1";
+      tutBtn.className = "btn btn-icon btn-ghost";
       tutBtn.title = t("dev_tutorial");
       const tutIcon = document.createElement("span");
-      tutIcon.className = "material-symbols-outlined text-base";
+      tutIcon.className = "material-symbols-outlined";
       tutIcon.textContent = "help";
       tutBtn.appendChild(tutIcon);
       tutBtn.addEventListener("click", () => showDeviceTutorial(d));
       tdActions.appendChild(tutBtn);
 
       const delBtn = document.createElement("button");
-      delBtn.className = "inline-flex items-center px-2.5 py-1 rounded-lg text-xs font-bold text-error hover:bg-error-container transition font-label ml-1";
+      delBtn.className = "btn btn-icon btn-ghost text-crit";
       delBtn.title = t("dev_delete");
       const delIcon = document.createElement("span");
-      delIcon.className = "material-symbols-outlined text-base";
+      delIcon.className = "material-symbols-outlined";
       delIcon.textContent = "delete";
       delBtn.appendChild(delIcon);
       delBtn.addEventListener("click", () => deleteDevice(d.id, d.name));
@@ -281,12 +276,11 @@ function renderDeviceTable() {
 
 function openDeviceInfo(d) {
   if (!d) return;
-  const modal = el("device-info-modal");
-  if (!modal) return;
+  if (!el("device-info-modal")) return;
 
   setText("device-info-name", d.name);
   const dot = el("device-info-status-dot");
-  if (dot) dot.className = "w-2.5 h-2.5 rounded-full " + (d.alert_count > 0 ? "bg-error" : d.online ? "bg-secondary" : "bg-outline");
+  if (dot) dot.className = "app-dot" + (d.alert_count > 0 ? " bg-crit" : d.online ? " bg-ok" : "");
 
   setText("info-status", d.online ? t("dev_status_online") : t("dev_status_offline"));
   setText("info-source", (SRC_LABEL[d.source] || (() => d.source))());
@@ -299,12 +293,11 @@ function openDeviceInfo(d) {
   setText("info-logs1h", numFmt(d.logs_1h || 0));
   setText("info-alerts", String(d.alert_count || 0));
 
-  modal.classList.remove("hidden");
+  openDialog("device-info-modal");
 }
 
 function closeDeviceInfo() {
-  const modal = el("device-info-modal");
-  if (modal) modal.classList.add("hidden");
+  closeDialog("device-info-modal");
 }
 
 function onDeviceInfoBackdrop(event) {
@@ -312,8 +305,7 @@ function onDeviceInfoBackdrop(event) {
 }
 
 function openAddDeviceModal() {
-  const modal = el("device-modal");
-  if (!modal) return;
+  if (!el("device-modal")) return;
   el("device-modal-form").classList.remove("hidden");
   el("device-modal-tutorial").classList.add("hidden");
   el("dev-name").value = "";
@@ -321,13 +313,11 @@ function openAddDeviceModal() {
   el("dev-os").value = "macos";
   const err = el("dev-form-error");
   if (err) err.classList.add("hidden");
-  modal.classList.remove("hidden");
-  el("dev-name").focus();
+  openDialog("device-modal");
 }
 
 function closeDeviceModal() {
-  const modal = el("device-modal");
-  if (modal) modal.classList.add("hidden");
+  closeDialog("device-modal");
 }
 
 function onDeviceModalBackdrop(event) {
@@ -387,7 +377,7 @@ function openTutorialPanel(icon, title, intro, pickOs) {
   setText("device-tut-icon", icon);
   setText("device-tut-title-text", title);
   setText("device-tut-intro", intro);
-  el("device-modal").classList.remove("hidden");
+  openDialog("device-modal");
 }
 
 function showDeviceTutorial(device) {

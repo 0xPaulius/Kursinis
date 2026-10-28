@@ -2,9 +2,10 @@
 
 import { el, setText } from "../dom.js";
 import { state } from "../state.js";
-import { alertTitle, t } from "../i18n.js";
+import { sevLabel, t } from "../i18n.js";
 import { numFmt, relTime } from "../format.js";
-import { navigate } from "../shell.js";
+import { alertRow } from "../alert-dialog.js";
+import { applyAxes, areaFill, sparkline, themeOptions, token, track } from "../charts.js";
 
 // main.js duomenų įkėlimo funkcijos (puslapiai main.js neimportuoja).
 let ctx = {};
@@ -29,11 +30,7 @@ export function renderRangeMenu() {
   menu.textContent = "";
   TIME_RANGES.forEach(r => {
     const btn = document.createElement("button");
-    const active = r.h === state.rangeHours;
-    btn.className = "w-full text-left px-4 py-2 text-label-md font-label transition-colors " +
-      (active
-        ? "bg-secondary-container text-on-secondary-container font-bold"
-        : "text-on-surface hover:bg-surface-container-high");
+    btn.className = "menu-item" + (r.h === state.rangeHours ? " is-active" : "");
     btn.textContent = t(r.key);
     btn.addEventListener("click", () => setRange(r.h));
     menu.appendChild(btn);
@@ -75,48 +72,37 @@ function logRate() {
   return Math.round(recent.reduce((a, p) => a + p.count, 0) / recent.length);
 }
 
+// Reikšmės spalva pagal slenkstį (tos pačios ribos kaip ankstesnių ženklelių).
+const STAT_COLORS = ["text-ok", "text-warn", "text-crit"];
+
+function setStat(id, text, colorCls) {
+  const e = el(id);
+  if (!e) return;
+  e.textContent = text;
+  e.classList.remove(...STAT_COLORS);
+  if (colorCls) e.classList.add(colorCls);
+}
+
 export function renderMetrics() {
   const total  = state.current ? (state.current.total || 0) : 0;
   const errors = errorCount();
   const rate   = logRate();
+  const hasNow = !!state.current;
+  const hasHistory = state.history.length > 0;
+  const logsColor = total > 1000 ? "warn" : "ok";
+  const rateColor = rate > 500 ? "warn" : "ok";
 
-  // Logs
-  setText("metric-logs-value", state.current ? numFmt(total) : "—");
-  setMetricBadge("metric-logs-badge", total > 1000 ? "high" : "normal");
-  setBarWidth("metric-logs-bar", Math.min(100, total / 10));
+  setStat("metric-logs-value", hasNow ? numFmt(total) : "—", hasNow ? `text-${logsColor}` : "");
+  setStat("metric-errors-value", hasNow ? String(errors) : "—", hasNow ? (errors > 0 ? "text-crit" : "text-ok") : "");
+  const share = (errors / total * 100).toLocaleString(state.lang === "lt" ? "lt-LT" : "en-GB", { maximumFractionDigits: 1 });
+  setText("metric-errors-pct", hasNow && total > 0 ? `${share} %` : "");
+  setStat("metric-rate-value", hasHistory ? numFmt(rate) : "—", hasHistory ? `text-${rateColor}` : "");
 
-  // Klaidos
-  setText("metric-errors-value", state.current ? String(errors) : "—");
-  setMetricBadge("metric-errors-badge", errors > 0 ? "error" : "ok");
-  const errBar = el("metric-errors-bar");
-  if (errBar) {
-    errBar.style.width = (total > 0 ? Math.min(100, Math.round(errors / total * 100)) : 0) + "%";
-    errBar.className = "h-full rounded-full transition-all " + (errors > 0 ? "bg-error" : "bg-black");
-  }
-
-  // Sparta
-  setText("metric-rate-value", state.history.length ? numFmt(rate) : "—");
-  setMetricBadge("metric-rate-badge", rate > 500 ? "high" : "normal");
-  setBarWidth("metric-rate-bar", Math.min(100, rate / 10));
-}
-
-function setMetricBadge(id, kind) {
-  const e = el(id);
-  if (!e) return;
-  const cfgs = {
-    normal: { cls: "bg-secondary-container text-on-secondary-container", label: t("metric_normal") },
-    high:   { cls: "bg-tertiary-fixed text-on-tertiary-container",       label: t("metric_high")   },
-    ok:     { cls: "bg-secondary-container text-on-secondary-container", label: t("metric_ok")     },
-    error:  { cls: "bg-error-container text-on-error-container",         label: t("metric_high")   },
-  };
-  const cfg = cfgs[kind] || cfgs.normal;
-  e.className = `px-2.5 py-0.5 rounded-full text-[10px] font-bold font-label ${cfg.cls}`;
-  e.textContent = cfg.label;
-}
-
-function setBarWidth(id, pct) {
-  const e = el(id);
-  if (e) e.style.width = pct + "%";
+  const recent = state.history.slice(-12).map(p => p.count);
+  const logsSpark = el("metric-logs-spark");
+  const rateSpark = el("metric-rate-spark");
+  if (logsSpark) sparkline(logsSpark, recent, token(`--${logsColor}`));
+  if (rateSpark) sparkline(rateSpark, recent, token(`--${rateColor}`));
 }
 
 export function renderTrafficChart() {
@@ -133,6 +119,9 @@ export function renderTrafficChart() {
 
   setText("chart-total", numFmt(total) + " " + t("logs_unit"));
   setText("chart-peak",  numFmt(peak));
+  setText("traffic-avg",  numFmt(Math.round(total / values.length)));
+  setText("traffic-max",  numFmt(peak));
+  setText("traffic-last", numFmt(values[values.length - 1]));
 
   if (state.trafficChart) {
     state.trafficChart.data.labels = labels;
@@ -141,29 +130,19 @@ export function renderTrafficChart() {
     return;
   }
 
-  state.trafficChart = new Chart(canvas, {
+  const chart = new Chart(canvas, {
     type: "line",
     data: {
       labels,
       datasets: [{
         label: "Logs",
         data: values,
-        borderColor: "#006c4a",
-        backgroundColor: (ctx) => {
-          const chart = ctx.chart;
-          const { ctx: c, chartArea } = chart;
-          if (!chartArea) return "rgba(0,108,74,0.12)";
-          const g = c.createLinearGradient(0, chartArea.top, 0, chartArea.bottom);
-          g.addColorStop(0, "rgba(0,108,74,0.22)");
-          g.addColorStop(1, "rgba(0,108,74,0)");
-          return g;
-        },
+        backgroundColor: areaFill("--ok"),
         fill: true,
         tension: 0.35,
-        borderWidth: 2,
+        borderWidth: 1.5,
         pointRadius: 0,
         pointHoverRadius: 4,
-        pointBackgroundColor: "#006c4a",
       }],
     },
     options: {
@@ -176,11 +155,20 @@ export function renderTrafficChart() {
         tooltip: { callbacks: { label: ctx => `${ctx.parsed.y} logs` } },
       },
       scales: {
-        x: { grid: { color: "rgba(120,118,123,0.12)" }, ticks: { color: "#78767b", maxTicksLimit: 8, font: { size: 11 } } },
-        y: { grid: { color: "rgba(120,118,123,0.12)" }, ticks: { color: "#78767b", font: { size: 11 } }, beginAtZero: true },
+        x: { ticks: { maxTicksLimit: 8 } },
+        y: { beginAtZero: true },
       },
     },
   });
+  restyleTrafficChart(chart, themeOptions());
+  chart.update("none");
+  state.trafficChart = track(chart, restyleTrafficChart);
+}
+
+function restyleTrafficChart(chart, o) {
+  const color = token("--ok");
+  Object.assign(chart.data.datasets[0], { borderColor: color, pointBackgroundColor: color });
+  applyAxes(chart, o);
 }
 
 function onTrafficDeviceChange() {
@@ -224,82 +212,83 @@ export function renderTrafficDeviceStats() {
   setText("tds-alerts",   String(d.alert_count || 0));
 }
 
-export function renderKeyEvents() {
-  const listEl = el("key-events-list");
-  if (!listEl) return;
+function emptyRow(tbody, cols, text) {
+  const tr = document.createElement("tr");
+  const td = document.createElement("td");
+  td.colSpan = cols;
+  td.className = "empty";
+  td.textContent = text;
+  tr.appendChild(td);
+  tbody.appendChild(tr);
+}
 
+function renderKeyEvents() {
+  const tbody = el("key-events-table");
+  if (!tbody) return;
+  tbody.textContent = "";
+  if (!state.alerts.length) { emptyRow(tbody, 6, t("no_events")); return; }
+  state.alerts.slice(0, 4).forEach(a => tbody.appendChild(alertRow(a)));
+}
+
+function renderThreats() {
+  const n = state.alerts.filter(a => a.severity === "critical" || a.severity === "high").length;
+  setText("hero-threats", String(n));
+  el("threat-panel")?.classList.toggle("stat-threat", n > 0);
+}
+
+const SEVERITIES = ["critical", "high", "medium", "low"];
+
+// Tie patys 20 naujausių įspėjimų, suskirstyti pagal lygį.
+function renderSeverityBreakdown() {
+  const box = el("sev-breakdown");
+  if (!box) return;
+  box.textContent = "";
   if (!state.alerts.length) {
-    listEl.textContent = "";
     const empty = document.createElement("div");
-    empty.className = "text-center py-8 text-on-surface-variant text-sm font-label";
-
-    const icon = document.createElement("span");
-    icon.className = "material-symbols-outlined text-4xl block mb-2 text-secondary";
-    icon.textContent = "check_circle";
-    empty.appendChild(icon);
-
-    const msg = document.createElement("span");
-    msg.textContent = t("no_events");
-    empty.appendChild(msg);
-
-    listEl.appendChild(empty);
+    empty.className = "empty";
+    empty.textContent = t("no_events");
+    box.appendChild(empty);
     return;
   }
-
-  const SEV_CFG = {
-    critical: { bg: "bg-error-container",     icon_fg: "text-on-error-container"     },
-    high:     { bg: "bg-error-container",     icon_fg: "text-on-error-container"     },
-    medium:   { bg: "bg-tertiary-fixed",      icon_fg: "text-on-tertiary-container"  },
-    low:      { bg: "bg-secondary-container", icon_fg: "text-on-secondary-container" },
-  };
-
-  listEl.textContent = "";
-  state.alerts.slice(0, 4).forEach(a => {
-    const cfg = SEV_CFG[a.severity] || SEV_CFG.low;
-    const meta = [a.source_ip || a.source_host || "", relTime(a.timestamp)].filter(Boolean).join(" • ");
-
+  const counts = Object.fromEntries(SEVERITIES.map(s => [s, 0]));
+  state.alerts.forEach(a => { if (a.severity in counts) counts[a.severity]++; });
+  const max = Math.max(1, ...Object.values(counts));
+  SEVERITIES.forEach(s => {
     const row = document.createElement("div");
-    row.className = "flex items-center gap-3 p-3 rounded-lg hover:bg-surface-container-low transition-colors group cursor-pointer";
-    row.addEventListener("click", () => navigate("anomalies"));
-
-    const iconWrap = document.createElement("div");
-    iconWrap.className = `w-9 h-9 rounded-full flex items-center justify-center shrink-0 ${cfg.bg}`;
-    const icon = document.createElement("span");
-    icon.className = `material-symbols-outlined text-lg ${cfg.icon_fg}`;
-    icon.textContent = "warning";
-    iconWrap.appendChild(icon);
-
-    const info = document.createElement("div");
-    info.className = "flex-grow min-w-0";
-    const title = document.createElement("h4");
-    title.className = "font-body font-semibold text-xs truncate";
-    title.textContent = alertTitle(a.alert_type, a.title);
-    const metaEl = document.createElement("p");
-    metaEl.className = "text-[10px] text-on-surface-variant truncate";
-    metaEl.textContent = meta;
-    info.appendChild(title);
-    info.appendChild(metaEl);
-
-    const time = document.createElement("span");
-    time.className = "text-[10px] font-label text-outline whitespace-nowrap";
-    time.textContent = relTime(a.timestamp);
-
-    row.appendChild(iconWrap);
-    row.appendChild(info);
-    row.appendChild(time);
-    listEl.appendChild(row);
+    row.className = "gauge-row";
+    const label = document.createElement("span");
+    label.textContent = sevLabel(s);
+    const trackEl = document.createElement("div");
+    trackEl.className = "gauge-track";
+    const fill = document.createElement("div");
+    fill.className = `gauge-fill bg-sev-${s}`;
+    fill.style.width = `${counts[s] / max * 100}%`;
+    trackEl.appendChild(fill);
+    const count = document.createElement("b");
+    count.className = `sev-${s}`;
+    count.textContent = String(counts[s]);
+    row.append(label, trackEl, count);
+    box.appendChild(row);
   });
+}
+
+// Viskas, kas priklauso nuo įspėjimų sąrašo (kviečiama ir gavus naujus įspėjimus).
+export function renderAlertPanels() {
+  renderKeyEvents();
+  renderThreats();
+  renderSeverityBreakdown();
 }
 
 export function init(context) {
   ctx = context;
   el("range-btn")?.addEventListener("click", toggleRangeMenu);
   el("traffic-device-select")?.addEventListener("change", onTrafficDeviceChange);
+  el("refresh-btn")?.addEventListener("click", () => { ctx.loadTrafficHistory(); ctx.loadTrafficCurrent(); });
 }
 
 export function render() {
   renderMetrics();
-  renderKeyEvents();
+  renderAlertPanels();
   renderTrafficChart();
   populateTrafficDeviceSelect();
   renderTrafficDeviceStats();

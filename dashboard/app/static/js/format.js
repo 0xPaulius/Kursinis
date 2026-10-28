@@ -21,14 +21,6 @@ export function relTime(iso) {
   return t("day_ago")(Math.floor(hr / 24));
 }
 
-export function timeLabel(iso) {
-  if (!iso) return "";
-  return new Date(iso).toLocaleTimeString(
-    state.lang === "lt" ? "lt-LT" : "en-GB",
-    { hour: "2-digit", minute: "2-digit" }
-  );
-}
-
 // Pilna data ir laikas + santykinis laikas (naudojama detalės lange).
 export function fullTime(iso) {
   if (!iso) return "";
@@ -42,4 +34,14 @@ export function fullTime(iso) {
 
 export function numFmt(n) {
   return Number(n).toLocaleString(state.lang === "lt" ? "lt-LT" : "en-GB");
+}
+
+// Lentelėms: šiandienos įvykiams — tik laikas, senesniems — data ir laikas.
+export function shortTime(iso) {
+  if (!iso) return "";
+  const d = new Date(iso);
+  const locale = state.lang === "lt" ? "lt-LT" : "en-GB";
+  return d.toDateString() === new Date().toDateString()
+    ? d.toLocaleTimeString(locale, { hour: "2-digit", minute: "2-digit" })
+    : d.toLocaleString(locale, { month: "2-digit", day: "2-digit", hour: "2-digit", minute: "2-digit" });
 }
