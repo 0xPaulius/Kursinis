@@ -29,7 +29,7 @@ CATALOG: dict[str, list[str]] = {
     "win_discovery_burst": ["T1087.001", "T1033"],
     "win_lolbin_network": ["T1105"],
     "win_startup_persistence": ["T1547.001"],
-    # Linux endpoint taisyklės (auditd / journal, job="linux_endpoint")
+    # Linux auditd taisyklės (job="linux_endpoint" arba per rsyslog job="syslog")
     "linux_sudo_auth_failure": ["T1548.003"],
     "linux_account_created": ["T1136.001"],
     "linux_suspicious_execve": ["T1059.004"],

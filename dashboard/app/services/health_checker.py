@@ -18,9 +18,24 @@ from app.services.loki_client import AsyncLokiClient
 logger = logging.getLogger(__name__)
 
 ANOMALY_DB_PATH = os.getenv("ANOMALY_DB_PATH", "/data/anomaly_history.json")
+# Detektorius liečia šį failą kiekvieno ciklo pradžioje (bendras anomaly-data volume).
+DETECTOR_HEARTBEAT_PATH = os.path.join(os.path.dirname(ANOMALY_DB_PATH), "detector.alive")
+_HEARTBEAT_MAX_AGE = 120.0  # sekundės — kaip detektoriaus Docker healthcheck
 # Alloy būklės (readiness) endpoint'as — pakeitė Promtail.
 ALLOY_READY_URL = os.getenv("ALLOY_READY_URL", "http://alloy:12345/-/ready")
 _CACHE_TTL = 30.0  # sekundės
+# Galinių įrenginių agentų telemetrija (Windows / Linux Alloy per šliuzą).
+_ENDPOINT_SELECTOR = '{job=~"windows|linux_endpoint"}'
+
+
+def _ago(seconds: float) -> str:
+    """Praėjęs laikas trumpai: „40 min“, „3 val.“, „2 d.“."""
+    minutes = int(seconds // 60)
+    if minutes < 60:
+        return f"{minutes} min"
+    if minutes < 24 * 60:
+        return f"{minutes // 60} val."
+    return f"{minutes // (24 * 60)} d."
 
 
 class HealthChecker:
@@ -86,8 +101,8 @@ class HealthChecker:
             message=alloy_msg,
         ))
 
-        # --- Galinių įrenginių telemetrija (Windows) — tik jei yra bent vienas ---
-        if "windows" in LOG_JOBS and loki_ready:
+        # --- Galinių įrenginių telemetrija (Windows / Linux) — jei per 7 d. buvo bent vienas ---
+        if loki_ready and ("windows" in LOG_JOBS or "linux_endpoint" in LOG_JOBS):
             ep_status, ep_msg = await self._check_endpoint_telemetry()
             if ep_status is not None:
                 services.append(ServiceHealth(
@@ -142,19 +157,22 @@ class HealthChecker:
 
     async def _check_endpoint_telemetry(self) -> tuple[str | None, str]:
         """
-        Windows endpoint telemetrijos šviežumas. Grąžina (None, "") jei endpoint'ų
-        iš viso nėra (nerodome paslaugos vartotojams be galinių įrenginių).
+        Windows / Linux agentų telemetrijos šviežumas. Grąžina (None, "") tik jei per 7 d.
+        jos nebuvo (nerodome paslaugos vartotojams be galinių įrenginių); visam parkui
+        nutilus lieka įspėjimas, o ne dingstanti eilutė.
         """
         now = datetime.datetime.now(datetime.timezone.utc)
         recent = await self._loki.query_range(
-            '{job="windows"}', start=now - datetime.timedelta(minutes=5), end=now, limit=1)
+            _ENDPOINT_SELECTOR, start=now - datetime.timedelta(minutes=5), end=now, limit=1)
         if recent:
             return "ok", "Galiniai įrenginiai siunčia telemetriją"
-        hour = await self._loki.query_range(
-            '{job="windows"}', start=now - datetime.timedelta(hours=1), end=now, limit=1)
-        if hour:
-            return "warning", "Telemetrijos negauta per paskutines 5 min"
-        return None, ""  # endpoint'ų nėra — paslaugos nerodome
+        # backward + limit=1: naujausia eilutė per 7 d.
+        newest = await self._loki.query_range(
+            _ENDPOINT_SELECTOR, start=now - datetime.timedelta(days=7), end=now, limit=1)
+        if not newest:
+            return None, ""  # endpoint'ų nėra — paslaugos nerodome
+        age = now.timestamp() - int(newest[0]["timestamp"]) / 1e9
+        return "warning", f"Telemetrijos negaunama — paskutinė gauta prieš {_ago(age)}"
 
     async def _check_alloy_ready(self) -> tuple[str, str]:
         """Tikrina Alloy /-/ready endpoint'ą tiesiogiai (nepriklauso nuo Loki)."""
@@ -168,16 +186,13 @@ class HealthChecker:
 
     def _check_detector_health(self) -> tuple[str, str]:
         """
-        Tikrina anomalijų detektoriaus veikimą per failo modifikacijos laiką.
-        Nenaudoja json.load — tik mtime, kad neverstų viso failo atmintyje.
+        Tikrina anomalijų detektoriaus gyvybės signalą (heartbeat failo amžių).
+        Nesant failo arba jam pasenus detektorius neveikia — aptikimas nevyksta.
         """
-        if not os.path.exists(ANOMALY_DB_PATH):
-            # Failas gali neegzistuoti jei dar nebuvo aptikta anomalijų — tai normalu
-            return "ok", "Veikia (anomalijų dar neaptikta)"
-
         try:
-            os.path.getmtime(ANOMALY_DB_PATH)
-            return "ok", "Veikia normaliai"
-        except OSError as exc:
-            logger.warning("Detektoriaus failo klaida: %s", exc)
-            return "warning", "Nepavyko perskaityti duomenų"
+            age = time.time() - os.path.getmtime(DETECTOR_HEARTBEAT_PATH)
+        except OSError:
+            return "critical", "Neveikia — gyvybės signalo nėra (paleiskite su --profile anomaly)"
+        if age > _HEARTBEAT_MAX_AGE:
+            return "critical", f"Neatsako — paskutinis gyvybės signalas prieš {int(age // 60)} min"
+        return "ok", "Veikia normaliai"

@@ -114,6 +114,31 @@ class AsyncLokiClient:
             logger.warning("Loki query_metric klaida (%s): %s", query[:60], exc)
             return []
 
+    async def query_instant(
+        self,
+        query: str,
+        at: datetime.datetime | None = None,
+    ) -> list[dict]:
+        """
+        Vykdo LogQL metric query vienam laiko momentui (be query_range žingsnio lygiavimo).
+        Grąžina vector rezultatą: [{metric: {}, value: [ts, val]}]
+        """
+        if at is None:
+            at = datetime.datetime.now(datetime.timezone.utc)
+
+        try:
+            resp = await self._client.get(
+                f"{self.base_url}/loki/api/v1/query",
+                params={"query": query, "time": _to_ns(at)},
+                timeout=20.0,
+            )
+            resp.raise_for_status()
+            return resp.json().get("data", {}).get("result", [])
+
+        except Exception as exc:
+            logger.warning("Loki query_instant klaida (%s): %s", query[:60], exc)
+            return []
+
     async def is_ready(self) -> bool:
         """Tikrina ar Loki yra pasiruošęs."""
         try:

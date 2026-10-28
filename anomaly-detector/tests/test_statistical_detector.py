@@ -29,9 +29,10 @@ class FakeLokiClient(LokiClient):
         return [{"timestamp": "0", "line": "test", "labels": {}}] * min(limit, 3)
 
 
-def _seed(det: StatisticalDetector, values: list[float], start: datetime.datetime = T0):
+def _seed(det: StatisticalDetector, values: list[float], start: datetime.datetime = T0,
+          step_minutes: int = 10):
     for i, value in enumerate(values):
-        det._update_baseline(start + datetime.timedelta(minutes=i), value)
+        det._update_baseline(start + datetime.timedelta(minutes=i * step_minutes), value)
 
 
 # ---------------------------------------------------------------------------
@@ -43,8 +44,14 @@ def test_volume_spike_silent_during_warmup():
     det = StatisticalDetector(FakeLokiClient(default=10))
     for i in range(5):
         assert det.check_log_volume_spike(now=T0 + datetime.timedelta(minutes=i)) == []
-    # Po 5 ciklų baseline užpildyta; 6-as gali tikrinti, bet std=0 todėl tylu.
     assert len(det.baseline_history) == 5
+
+
+def test_volume_spike_silent_until_baseline_spans_an_hour():
+    """Kelių minučių istorija (daug įrašų, mažas std) dar nevertinama — net ir esant šuoliui."""
+    det = StatisticalDetector(FakeLokiClient(default=1000))
+    _seed(det, [8.0, 10.0, 12.0, 9.0, 11.0, 10.0, 9.0, 11.0] * 5, step_minutes=1)  # 39 min
+    assert det.check_log_volume_spike(now=T0 + datetime.timedelta(minutes=40)) == []
 
 
 def test_volume_spike_no_alert_on_stable_traffic():
@@ -61,10 +68,10 @@ def test_volume_spike_triggers_on_huge_jump(monkeypatch):
     monkeypatch.setattr(detector, "LOG_SPIKE_MULTIPLIER", 3.0)
 
     det = StatisticalDetector(FakeLokiClient(default=1000))
-    # Įvairi baseline (kitaip std=0 ir z-score neapibrėžtas)
+    # Įvairi baseline (kitaip std=0 ir z-score neapibrėžtas), 70 min istorijos
     _seed(det, [8.0, 10.0, 12.0, 9.0, 11.0, 10.0, 9.0, 11.0])
 
-    alerts = det.check_log_volume_spike(now=T0 + datetime.timedelta(minutes=10))
+    alerts = det.check_log_volume_spike(now=T0 + datetime.timedelta(minutes=80))
 
     assert len(alerts) == 1
     assert alerts[0].alert_type == "log_volume_spike"
@@ -76,7 +83,7 @@ def test_volume_spike_no_alert_when_std_is_zero():
     """Jei visi baseline įrašai identiški (std=0), netriggeriname (apsauga nuo dalybos iš 0)."""
     det = StatisticalDetector(FakeLokiClient(default=1000))
     _seed(det, [10.0] * 10)
-    assert det.check_log_volume_spike(now=T0 + datetime.timedelta(minutes=10)) == []
+    assert det.check_log_volume_spike(now=T0 + datetime.timedelta(minutes=100)) == []
 
 
 def test_volume_spike_history_bounded_by_time():

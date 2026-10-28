@@ -4,6 +4,7 @@ Engine (bendro aptikimo ciklo) testai: virtualus laikrodis, cooldown ir ML dažn
 from __future__ import annotations
 
 import datetime
+import json
 
 from detector import SSH_BRUTE_THRESHOLD, Engine, LokiClient, Selectors
 
@@ -73,6 +74,27 @@ def test_cooldown_uses_virtual_time():
     assert len(first) == 1
     assert len(raw) == 1 and second == []      # aptikta, bet nuslopinta
     assert len(third) == 1                      # cooldown praėjo virtualiu laiku
+
+
+class AccountsCreatedLoki(RecordingLokiClient):
+    """Trys skirtingos Windows paskyros (4720) tame pačiame host'e per vieną langą."""
+
+    def query_range(self, query, start=None, end=None, limit=5000):
+        if 'job="windows"' not in query:
+            return []
+        return [{"timestamp": "0", "labels": {"job": "windows"}, "line": json.dumps({
+            "event_id": 4720, "channel": "Security", "computer": "PC-01",
+            "event_data": f'<Data Name="TargetUserName">{user}</Data>'})}
+            for user in ("backdoor1", "backdoor2", "backdoor3")]
+
+
+def test_cooldown_keeps_distinct_events_of_same_type_and_host():
+    engine = Engine(AccountsCreatedLoki(), enable_ml=False, enable_linux=False, cooldown_seconds=300)
+    _, first = engine.run_cycle(T0)
+    _, repeat = engine.run_cycle(T0 + datetime.timedelta(seconds=5))
+
+    assert sorted(a.details["key"] for a in first) == ["backdoor1", "backdoor2", "backdoor3"]
+    assert repeat == []                         # tie patys įvykiai — nuslopinti
 
 
 def test_ml_disabled_by_default():

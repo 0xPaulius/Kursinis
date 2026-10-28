@@ -141,6 +141,18 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 
+
+# Frontend'as — keli ES moduliai be versijų žymų: be šios antraštės naršyklė gali
+# po atnaujinimo sujungti senus ir naujus modulius. no-cache = kas kartą tikrinti ETag.
+@app.middleware("http")
+async def revalidate_frontend(request, call_next):
+    response = await call_next(request)
+    path = request.url.path
+    if path in ("/", "/login") or path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 # API maršrutai
 app.include_router(auth.router)
 app.include_router(traffic.router)

@@ -12,7 +12,7 @@
 # užtenka CA failo. Tinklo įrenginiai, nepalaikantys TLS (pvz. MikroTik
 # RouterOS), toliau siunčia per UDP/TCP 514.
 #
-# Naudoja d_all / d_by_host / d_security / d_errors ir filtrus iš syslog-ng.conf.
+# Naudoja d_all / d_security / d_errors ir filtrus iš syslog-ng.conf.
 ####################################################################
 
 source s_tls {
@@ -30,6 +30,5 @@ source s_tls {
 };
 
 log { source(s_tls); destination(d_all); };
-log { source(s_tls); destination(d_by_host); };
 log { source(s_tls); filter(f_security); destination(d_security); };
 log { source(s_tls); filter(f_error); destination(d_errors); };

@@ -1,9 +1,10 @@
 """
 Įvykių atvaizdavimas į tą patį formatą, kurį gamina gyvas konvejeris.
 
-syslog-ng rašo šabloną `${ISODATE} ${HOST} ${FACILITY}.${LEVEL} ${PROGRAM}[${PID}]: ${MESSAGE}`,
+syslog-ng rašo šabloną `${R_ISODATE} ${HOST} ${FACILITY}.${LEVEL} ${PROGRAM}[${PID}]: ${MESSAGE}`,
 o Alloy jį parsina ir prideda etiketes (host, facility, severity, program) bei
-`job` iš failo (all.log=syslog, errors.log=errors, security.log=security).
+`job` iš failo (all-*.log=syslog, errors-*.log=errors, security-*.log=security).
+Vertinime gavimo laiką atstoja originali rinkinio laiko žyma.
 
 Vertinime tą patį eventą paduodame į kelis srautus (job), kad detektorius matytų
 identišką vaizdą kaip gyvai: visada `syslog`, papildomai `errors` jei severity>=err,

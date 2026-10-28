@@ -181,6 +181,47 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
             "Rekomenduojama: patikrinkite failą ir pašalinkite, jei neatpažįstamas."
         ),
     },
+    # --- Linux galinių įrenginių (auditd) įspėjimai ---
+    "linux_sudo_auth_failure": {
+        "title": "Linux: nesėkmingi sudo bandymai",
+        "explanation": (
+            "Kelis kartus nepavyko gauti administratoriaus teisių (sudo/su). "
+            "Gali būti bandymas išsikelti teises."
+        ),
+        "recommendation": (
+            "Rekomenduojama: patikrinkite, ar tai darė pats vartotojas."
+        ),
+    },
+    "linux_account_created": {
+        "title": "Linux: sukurta nauja paskyra",
+        "explanation": (
+            "Serveryje sukurta nauja vietinė paskyra. "
+            "Jei to nedarė administratorius — gali būti įsilaužimo pėdsakas."
+        ),
+        "recommendation": (
+            "Rekomenduojama: patikrinkite, ar paskyra sukurta teisėtai."
+        ),
+    },
+    "linux_suspicious_execve": {
+        "title": "Linux: įtartina komanda",
+        "explanation": (
+            "Paleista komanda, būdinga nuotoliniam valdymui (pvz. interaktyvus shell "
+            "ar nc -e) — dažnas įsilaužėlio žingsnis."
+        ),
+        "recommendation": (
+            "Rekomenduojama: peržiūrėkite komandą ir izoliuokite serverį, jei ji neatpažįstama."
+        ),
+    },
+    "linux_discovery_burst": {
+        "title": "Linux: žvalgybos komandų serija",
+        "explanation": (
+            "Per trumpą laiką paleista daug sistemos žvalgybos komandų "
+            "(whoami, id, uname ir pan.) — būdinga po įsilaužimo."
+        ),
+        "recommendation": (
+            "Rekomenduojama: patikrinkite, kas vykdė komandas šiame serveryje."
+        ),
+    },
 }
 
 _DEFAULT_TRANSLATION = {
@@ -200,13 +241,18 @@ def _alert_id(raw: dict[str, Any]) -> str:
     Deterministinis ID iš pagrindinių laukų — leidžia klientui sekti "matytus"
     įspėjimus, nesikeičia tarp užklausų.
     """
-    key = "|".join([
+    parts = [
         str(raw.get("timestamp", "")),
         str(raw.get("alert_type", "")),
         str(raw.get("source_ip", "")),
         str(raw.get("source_host", "")),
-    ])
-    return hashlib.sha1(key.encode("utf-8")).hexdigest()[:16]
+    ]
+    # Vieno įvykio tapatybė (pvz. paskyra): keli to paties tipo įvykiai tame pačiame cikle.
+    # Pridedama tik esant — kitų alertų ID nesikeičia.
+    event_key = (raw.get("details") or {}).get("key")
+    if event_key:
+        parts.append(str(event_key))
+    return hashlib.sha1("|".join(parts).encode("utf-8")).hexdigest()[:16]
 
 
 def _make_alert_item(raw: dict[str, Any]) -> AlertItem:

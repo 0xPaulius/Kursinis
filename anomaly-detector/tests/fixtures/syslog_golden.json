@@ -1,5 +1,5 @@
 {
-  "captured_with": "syslog-ng (TZ=UTC) -> promtail 3.4.2 -> loki 3.4.2, repo configs",
+  "captured_with": "syslog-ng (TZ=UTC) -> promtail 3.4.2 -> loki 3.4.2, repo configs; filename label later dropped in Alloy (stage.label_drop)",
   "cases": [
     {
       "event": {
@@ -16,7 +16,6 @@
           "line": "2026-10-12T16:27:35+00:00 golden-a daemon.info nginx[]: 192.168.1.50 - - \"GET /index.html HTTP/1.1\" 200 1234",
           "labels": {
             "facility": "daemon",
-            "filename": "/var/log/syslog-ng/all.log",
             "host": "golden-a",
             "job": "syslog",
             "program": "nginx",
@@ -40,7 +39,6 @@
           "line": "2026-10-12T16:27:35+00:00 golden-b auth.warning sshd[1234]: Failed password for root from 203.0.113.9 port 4444 ssh2",
           "labels": {
             "facility": "auth",
-            "filename": "/var/log/syslog-ng/security.log",
             "host": "golden-b",
             "job": "security",
             "program": "sshd",
@@ -51,7 +49,6 @@
           "line": "2026-10-12T16:27:35+00:00 golden-b auth.warning sshd[1234]: Failed password for root from 203.0.113.9 port 4444 ssh2",
           "labels": {
             "facility": "auth",
-            "filename": "/var/log/syslog-ng/all.log",
             "host": "golden-b",
             "job": "syslog",
             "program": "sshd",
@@ -74,7 +71,6 @@
         {
           "line": "2026-10-12T16:27:35+00:00 golden-c daemon.err nginx[]: connect() failed (111: Connection refused) while connecting to upstream",
           "labels": {
-            "filename": "/var/log/syslog-ng/errors.log",
             "host": "golden-c",
             "job": "errors",
             "program": "nginx",
@@ -85,7 +81,6 @@
           "line": "2026-10-12T16:27:35+00:00 golden-c daemon.err nginx[]: connect() failed (111: Connection refused) while connecting to upstream",
           "labels": {
             "facility": "daemon",
-            "filename": "/var/log/syslog-ng/all.log",
             "host": "golden-c",
             "job": "syslog",
             "program": "nginx",
@@ -108,7 +103,6 @@
         {
           "line": "2026-10-12T16:27:35+00:00 golden-d kern.crit kernel[]: Out of memory: Killed process 4242 (java)",
           "labels": {
-            "filename": "/var/log/syslog-ng/errors.log",
             "host": "golden-d",
             "job": "errors",
             "program": "kernel",
@@ -119,7 +113,6 @@
           "line": "2026-10-12T16:27:35+00:00 golden-d kern.crit kernel[]: Out of memory: Killed process 4242 (java)",
           "labels": {
             "facility": "kern",
-            "filename": "/var/log/syslog-ng/all.log",
             "host": "golden-d",
             "job": "syslog",
             "program": "kernel",
@@ -143,7 +136,6 @@
           "line": "2026-10-12T16:27:35+00:00 golden-e auth.info su[27950]: pam_unix(su:session): session opened for user root by (uid=33)",
           "labels": {
             "facility": "auth",
-            "filename": "/var/log/syslog-ng/all.log",
             "host": "golden-e",
             "job": "syslog",
             "program": "su",
@@ -167,7 +159,6 @@
           "line": "2026-10-12T16:27:35+00:00 golden-f local0.notice firewall[]: input: in:ether1, proto TCP, 203.0.113.5:40000->192.168.1.1:22, DROP",
           "labels": {
             "facility": "local0",
-            "filename": "/var/log/syslog-ng/security.log",
             "host": "golden-f",
             "job": "security",
             "program": "firewall",
@@ -178,7 +169,6 @@
           "line": "2026-10-12T16:27:35+00:00 golden-f local0.notice firewall[]: input: in:ether1, proto TCP, 203.0.113.5:40000->192.168.1.1:22, DROP",
           "labels": {
             "facility": "local0",
-            "filename": "/var/log/syslog-ng/all.log",
             "host": "golden-f",
             "job": "syslog",
             "program": "firewall",

@@ -104,7 +104,10 @@ class Selectors:
     extra_matchers: str = LOKI_EXTRA_MATCHERS
 
     def stream(self, job: str, *matchers: str) -> str:
-        parts = [f'job="{job}"', *matchers]
+        return self._select(f'job="{job}"', *matchers)
+
+    def _select(self, *matchers: str) -> str:
+        parts = list(matchers)
         if self.extra_matchers:
             parts.append(self.extra_matchers)
         return "{" + ", ".join(parts) + "}"
@@ -122,8 +125,9 @@ class Selectors:
         return self.stream("windows")
 
     @property
-    def linux_endpoint(self) -> str:
-        return self.stream("linux_endpoint")
+    def linux_audit(self) -> str:
+        """auditd įrašai: Alloy agentas (linux_endpoint) arba be agento per rsyslog -> syslog-ng (syslog)."""
+        return self._select('job=~"linux_endpoint|syslog"')
 
 
 # ============================================================

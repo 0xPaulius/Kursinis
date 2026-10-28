@@ -28,7 +28,7 @@ services:
     volumes:
       - ./config/syslog-ng/syslog-ng.conf:/etc/syslog-ng/syslog-ng.conf:ro
       - ./config/syslog-ng/conf.d:/etc/syslog-ng/conf.d:ro
-      - ./certs:/etc/syslog-ng/tls:ro
+      - ./certs/server:/etc/syslog-ng/tls:ro   # be CA rakto (tools/gen-certs.sh)
       - syslog-ng-logs:/var/log/syslog-ng
     networks:
       - lognet
@@ -41,8 +41,6 @@ services:
   # ============================================================
   # 2. ALLOY - Logų siuntėjas į Loki (pakeitė Promtail)
   #    Skaito syslog-ng failus, prideda labels ir siunčia į Loki.
-  #    promtail-positions prijungtas tik skaitymui: legacy_positions_file
-  #    vieną kartą perima Promtail pozicijas, kad failai nebūtų skaitomi iš naujo.
   # ============================================================
   alloy:
     image: grafana/alloy:v1.20.1
@@ -57,7 +55,6 @@ services:
       - ./config/alloy/collector.alloy:/etc/alloy/config.alloy:ro
       - syslog-ng-logs:/var/log/syslog-ng:ro
       - alloy-data:/var/lib/alloy/data
-      - promtail-positions:/var/lib/promtail:ro
     networks:
       - lognet
     depends_on:
@@ -84,7 +81,7 @@ services:
       - "3500:3500"       # Endpoint'ų Loki push (HTTPS, mTLS)
     volumes:
       - ./config/alloy/gateway.alloy:/etc/alloy/config.alloy:ro
-      - ./certs:/etc/alloy/certs:ro
+      - ./certs/server:/etc/alloy/certs:ro     # clients.pem keičiamas vietoje — katalogas, ne failai
     networks:
       - lognet
     depends_on:
@@ -118,7 +115,7 @@ services:
   #    Web dashboard, Loki data source automatiškai sukonfigūruotas
   # ============================================================
   grafana:
-    image: grafana/grafana:11.5.2
+    image: grafana/grafana:11.5.10
     container_name: grafana
     restart: unless-stopped
     ports:
@@ -166,7 +163,7 @@ services:
       loki:
         condition: service_healthy
     healthcheck:
-      test: ["CMD-SHELL", "test -f /tmp/detector.alive && [ $(( $(date +%s) - $(stat -c %Y /tmp/detector.alive) )) -lt 120 ] || exit 1"]
+      test: ["CMD-SHELL", "test -f /data/detector.alive && [ $(( $(date +%s) - $(stat -c %Y /data/detector.alive) )) -lt 120 ] || exit 1"]
       interval: 60s
       timeout: 10s
       retries: 3
@@ -283,8 +280,6 @@ volumes:
   anomaly-data:
     driver: local
   dashboard-state:
-    driver: local
-  promtail-positions:
     driver: local
   alloy-data:
     driver: local

@@ -221,21 +221,5 @@ class SyslogEmitter:
         self._spawn(coro)
         return attacker_ip
 
-    def simulate_scenario(
-        self,
-        web_device: dict,
-        router_device: dict,
-        ssh_intensity: int = 15,
-        firewall_count: int = 60,
-        error_count: int = 12,
-    ) -> str:
-        """
-        Pilnas daugiapakopis demonstracinis scenarijus (SSH brute-force + ugniasienės
-        DROP banga + klaidų šuolis). Paliktas suderinamumui — deleguoja į `simulate_attack`.
-        """
-        return self.simulate_attack(
-            "full", web_device, router_device, ssh_intensity, firewall_count, error_count
-        )
-
     def close(self) -> None:
         self._sock.close()

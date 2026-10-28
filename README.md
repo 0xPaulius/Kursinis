@@ -82,15 +82,23 @@ docker compose --profile anomaly up -d
 paleidžia pilną daugiapakopį scenarijų. Sugeneruotą kenkėjišką srautą aptinka
 anomaly-detector ir per ~60 s parodo anomalijas „Anomalijų" skiltyje.
 
-### 3a. Galinių įrenginių priėmimas (Windows/Linux)
+### 3a. Realus biuras (gamybinis režimas)
 
 ```bash
-tools/gen-certs.sh ca && tools/gen-certs.sh server <kolektoriaus-IP>
-tools/gen-certs.sh client <vardas>
-docker compose --profile anomaly --profile endpoints up -d
+./setup-collector.sh 192.168.1.10   # fiksuotas kolektoriaus IP (DHCP rezervacija)
 ```
 
-Galinių įrenginių paruošimas (Sysmon, Alloy, auditd) — žr. `lab/README.md`.
+Vienas žingsnis: `.env` su atsitiktiniais slaptažodžiais (jei jų dar nėra), sertifikatai,
+TLS 6514, Windows/Linux diegimo paketai ir paleidimas gamybiniu režimu
+(`docker-compose.prod.yml`: be sintetinio srauto ir demonstracinių įrenginių, detektorius
+kas 60 s, be Grafana/Alloy telemetrijos, profiliai `anomaly` ir `endpoints`). Skriptas į `.env`
+įrašo `COMPOSE_FILE` ir `COMPOSE_PROFILES`, todėl vėlesnės `docker compose` komandos naudoja tuos
+pačius nustatymus. Kartoti saugu. Grįžti į demonstracinį režimą: ištrinkite šias dvi eilutes iš
+`.env` ir paleiskite `docker compose up -d`. Įrenginiai — žr. „Galinių įrenginių prijungimas".
+
+Gamybiniu režimu dashboard ir Grafana veikia per HTTPS su kolektoriaus sertifikatu
+(`https://192.168.1.10:8080`, `https://192.168.1.10:3000`). Kad naršyklė nerodytų įspėjimo,
+administratorių kompiuteriuose įdiekite `certs/ca.crt` kaip patikimą šakninę CA.
 
 ### 3b. Offline vertinimas (RQ1–RQ4)
 
@@ -148,17 +156,111 @@ Pridėkite į `/etc/rsyslog.conf`:
 /system logging add action=remote topics=firewall,error,warning,critical,info
 ```
 
-### Windows / Linux stotys (Grafana Alloy agentas)
-Galiniai įrenginiai siunčia Windows įvykių žurnalą (Security, Sysmon, PowerShell) arba
-Linux auditd telemetriją per Grafana Alloy į šliuzą (`:3500`, HTTPS + kliento sertifikatas).
-Sertifikatai generuojami `tools/gen-certs.sh`, paruošimas — `lab/windows/provision.ps1` ir
-`lab/linux/config.alloy` (žr. `lab/README.md`). Pavyzdys (Windows):
-```alloy
-loki.source.windowsevent "security" { eventlog_name = "Security"  forward_to = [loki.process.win.receiver] }
-loki.write "c" { endpoint { url = "https://192.168.1.X:3500/loki/api/v1/push"
-  tls_config { ca_file = "ca.crt" cert_file = "client.crt" key_file = "client.key" } } }
+### Windows / Linux kompiuteriai
+Windows siunčia įvykių žurnalą (Security, Sysmon, PowerShell) per Grafana Alloy agentą į
+šliuzą (`:3500`, HTTPS + kliento sertifikatas), Linux — rsyslog ir auditd įrašus per TLS 6514.
+Abu diegiami vienu paketu — žr. „Galinių įrenginių prijungimas". TLS nepalaikantys tinklo
+įrenginiai (pvz. MikroTik) toliau siunčia per UDP/TCP 514.
+
+## Galinių įrenginių prijungimas (onboarding)
+
+Windows kompiuteriai gauna vieną diegimo paketą (Sysmon + Grafana Alloy agentas, siunčia į
+šliuzą `:3500` per mTLS). Visi kompiuteriai naudoja tą patį „fleet" kliento sertifikatą, o
+šliuzas priima tik sertifikatus iš savo sąrašo (`certs/server/clients.pem`). Linux kompiuteriai
+lieka be agento: rsyslog ir auditd syslog įskiepis siunčia į syslog-ng per TLS 6514
+(`job="syslog"`, todėl veikia ir SSH taisyklės). Linux pakete nėra jokios paslapties, tik CA.
+
+### Vieną kartą serveryje
+
+Visus šiuos veiksmus (ir gamybinį režimą) atlieka `./setup-collector.sh 192.168.1.10`
+(žr. „Paleidimas", 3a). Rankiniu būdu:
+
+```bash
+tools/gen-certs.sh ca
+tools/gen-certs.sh server 192.168.1.10        # fiksuotas kolektoriaus IP (DHCP rezervacija)
+cp config/syslog-ng/conf.d/tls.conf.example config/syslog-ng/conf.d/tls.conf   # TLS 6514 Linux/macOS
+tools/gen-certs.sh bundle 192.168.1.10        # certs/bundles/kursinis-windows.zip ir kursinis-linux.tar.gz
+docker compose --profile anomaly --profile endpoints up -d
+docker compose restart syslog-ng alloy-gateway   # jei stack'as jau veikė (up -d failų pakeitimų nemato)
 ```
-TLS nepalaikantys tinklo įrenginiai (pvz. MikroTik) toliau siunčia per UDP/TCP 514.
+
+`bundle` išveda `bundle-id` (jo reikia Intune aptikimo taisyklei). Sertifikatai paimami iš
+`certs/` (gitignored), konteineriai mato tik `certs/server/` (be CA rakto). Paketams reikia
+interneto tik pirmą kartą: Alloy (tikrinamas pagal leidimo `SHA256SUMS`), Sysmon ir
+SwiftOnSecurity konfigūracija saugomi `certs/bundles/cache/`. Norėdami atnaujinti Sysmon,
+ištrinkite `cache/Sysmon.zip`.
+
+### Kiekviename kompiuteryje
+
+```powershell
+# Windows, administratoriaus PowerShell, išarchyvavus kursinis-windows.zip
+cd kursinis-windows
+powershell -ExecutionPolicy Bypass -File install.ps1               # -NoSysmon: be Sysmon
+powershell -ExecutionPolicy Bypass -File install.ps1 -Uninstall    # -KeepSysmon: Sysmon palikti
+```
+```bash
+# Linux (Debian/Ubuntu, RHEL/Fedora)
+tar xzf kursinis-linux.tar.gz && cd kursinis-linux && sudo ./setup.sh
+```
+
+Pakartotinis paleidimas yra ir atnaujinimas (nauja versija, adresas ar sertifikatas). Jei
+kolektorius nepasiekiamas, skriptai tik įspėja: Windows agentas bando iš naujo, kol pristato,
+o rsyslog kaupia žurnalus diske (iki 1 GB). Po kelių minučių kompiuteris atsiranda dashboard
+žemėlapyje savaime: Windows su `{job="windows", host="<kompiuterio vardas>"}`, Linux su
+`{job="syslog", host="<hostname>"}`. Windows diegimo žurnalas yra
+`C:\Windows\Temp\kursinis-install.log`.
+
+### Atšaukimas ir rotacija
+
+- Atskiras sertifikatas nešiojamam ar asmeniniam kompiuteriui:
+  `tools/gen-certs.sh bundle 192.168.1.10 laptop-07` → `certs/bundles/laptop-07/kursinis-windows.zip`.
+  Vardai turi būti neutralūs: šliuzas visų sąraše esančių sertifikatų CN parodo kiekvienam,
+  kas jungiasi prie `:3500`.
+- Atšaukimas: `tools/gen-certs.sh revoke laptop-07 && docker compose restart alloy-gateway`
+  (sąrašas perskaitomas tik paleidžiant šliuzą, `/-/reload` nepadeda). `revoke fleet`
+  atjungia visus bendrą sertifikatą naudojančius kompiuterius.
+- Fleet sertifikato keitimas (nutekėjo arba baigiasi 825 d. galiojimas):
+  `bundle 192.168.1.10 fleet-2` → `restart alloy-gateway` (seną ir naują šliuzas priima kartu)
+  → išplatinti naują paketą (pasikeitęs `bundle-id` priverčia Intune jį įdiegti iš naujo)
+  → `revoke fleet` → `restart alloy-gateway`.
+- Atšauktas agentas pats klaidos nerodo (bando be galo). Signalas yra šliuzo žurnale:
+  `docker compose logs alloy-gateway | grep "TLS handshake error"` su kompiuterio IP ir
+  `certificate signed by unknown authority`.
+
+### Masinis diegimas
+
+- **GPO:** išarchyvuotą `kursinis-windows` aplanką įdėkite į tik administratoriams rašomą
+  bendrinamą aplanką (pvz. `\\server\kursinis$`; skaityti gali tik `Domain Computers`, nes jame
+  yra `client.key`). Computer Configuration → Policies → Windows Settings → Scripts → Startup:
+  programa `powershell.exe`, parametrai
+  `-NoProfile -ExecutionPolicy Bypass -File \\server\kursinis$\kursinis-windows\install.ps1`.
+  Vykdoma kaip SYSTEM kiekvieno paleidimo metu (pakartoti saugu).
+- **Intune:** Win32 programa iš aplanko (`IntuneWinAppUtil -c kursinis-windows -s install.ps1 -o out`).
+  Diegimas `powershell.exe -NoProfile -ExecutionPolicy Bypass -File install.ps1`, šalinimas
+  `... -File install.ps1 -Uninstall`, vykdyti kaip System. Intune paleidžia 32 bitų PowerShell,
+  `install.ps1` pats persijungia į 64 bitų. Aptikimas pasirinktiniu skriptu:
+  `if ((Get-Content "$env:ProgramData\Kursinis\bundle-id" -ErrorAction SilentlyContinue) -eq "<bundle-id>") { "OK" }`.
+  Pakeitus paketą, atnaujinkite `bundle-id` taisyklėje ir Intune įdiegs naują versiją.
+- **Ansible:**
+  ```yaml
+  - ansible.windows.win_copy: { src: certs/bundles/kursinis-windows.zip, dest: C:\Windows\Temp\ }
+  - ansible.windows.win_shell: |
+      Expand-Archive C:\Windows\Temp\kursinis-windows.zip C:\Windows\Temp -Force
+      powershell -NoProfile -ExecutionPolicy Bypass -File C:\Windows\Temp\kursinis-windows\install.ps1
+  - ansible.builtin.unarchive: { src: certs/bundles/kursinis-linux.tar.gz, dest: /tmp }
+  - ansible.builtin.shell: /tmp/kursinis-linux/setup.sh
+    become: true
+  ```
+
+### Eksploatacija
+
+- Kolektoriui skirkite fiksuotą IP (DHCP rezervaciją): adresas įrašytas serverio sertifikate ir
+  paketuose. Pasikeitus adresui: `server <naujas IP>`, `bundle <naujas IP>` ir paketus išplatinti iš naujo.
+- Prievadus 3500 (Windows agentai), 6514 (Linux/macOS TLS) ir 514 (tinklo įrenginiai)
+  atidarykite tik biuro LAN potinkliams. Linux eilutės, kaip ir visas syslog, neautentifikuotos.
+- Paketo niekada neplatinkite per dashboard (paprastas HTTP) ar kitą HTTP šaltinį: Windows
+  pakete yra kliento privatusis raktas. Naudokite USB, administratorių bendrinamą aplanką,
+  Intune arba Ansible.
 
 ## Dashboard (Web UI)
 
@@ -183,9 +285,10 @@ docker compose run --rm anomaly-detector pytest tests/ -v
 ```
 .
 ├── docker-compose.yml               # Pagrindinis Docker Compose
+├── docker-compose.prod.yml          # Gamybinio režimo nustatymai (setup-collector.sh)
 ├── .env / .env.example              # Aplinkos kintamieji (.env gitignored)
-├── docs/
-│   └── ARCHITECTURE.md              # Architektūros aprašymas
+├── setup-collector.sh               # Kolektoriaus paruošimas realiam biurui vienu žingsniu
+├── onboarding/                      # windows/install.ps1 + config.alloy, linux/setup.sh
 ├── config/
 │   ├── syslog-ng/syslog-ng.conf    # Syslog-ng konfigūracija (+ conf.d/tls.conf.example)
 │   ├── loki/loki.yml               # Loki konfigūracija
@@ -212,7 +315,7 @@ docker compose run --rm anomaly-detector pytest tests/ -v
 │       ├── models/schemas.py        # Pydantic modeliai
 │       └── static/                  # index.html, login.html, css/, js/, fonts/
 ├── lab/                             # VM stendo scenarijai (Windows/Linux/Kali) + ground truth
-├── tools/                           # gen-certs.sh, parity_check.py, measure_resources.sh
+├── tools/                           # gen-certs.sh (CA, paketai, revoke), parity_check.py, measure_resources.sh
 ├── demo_data/anomaly_history.json   # Demo alertų duomenys
 ├── seed_demo.sh                     # Demo duomenų įkėlimo skriptas
 ├── CLAUDE.md                        # Agent kontekstas

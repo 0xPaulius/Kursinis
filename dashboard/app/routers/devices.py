@@ -28,26 +28,16 @@ from app.models.schemas import (
     SimulateResponse,
 )
 from app.services.alert_reader import AlertReader
-from app.services.device_monitor import DeviceMonitor
+from app.services.device_monitor import DeviceMonitor, alert_summary
 from app.services.device_registry import DeviceRegistry
 from app.services.syslog_emitter import SyslogEmitter
 
 router = APIRouter(prefix="/api/devices", tags=["devices"], dependencies=[Depends(require_auth)])
 
-_SEV_RANK = {"low": 1, "medium": 2, "high": 3, "critical": 4}
-
 
 def _annotate(device: dict, reader: AlertReader) -> Device:
     """Priskiria įrenginiui įspėjimų skaičių ir blogiausią sunkumą iš alertų istorijos."""
-    ip = device.get("ip", "")
-    hostname = device.get("hostname", "")
-    count = 0
-    worst = "none"
-    for alert in reader.read_all():
-        if (ip and alert.source_ip == ip) or (hostname and hostname in (alert.source_host or "")):
-            count += 1
-            if _SEV_RANK.get(alert.severity, 0) > _SEV_RANK.get(worst, 0):
-                worst = alert.severity
+    count, worst = alert_summary(device.get("ip", ""), device.get("hostname", ""), reader.read_all())
     return Device(**device, alert_count=count, worst_severity=worst)
 
 
