@@ -145,3 +145,50 @@ class NotificationSettings(BaseModel):
     enabled: bool = False
     webhook_url: str = ""
     min_severity: str = "medium"   # "low" | "medium" | "high" | "critical"
+
+
+class ProgramUsage(BaseModel):
+    """Programa (procesai, sugrupuoti pagal vardą) iš įrenginio būsenos įrašo."""
+    name: str
+    processes: int
+    cpu_pct: float              # visų branduolių dalis per 1 s matavimą
+    mem_kb: int                 # suminė RSS
+
+
+class HostStatus(BaseModel):
+    """Naujausias įrenginio būsenos įrašas (status heartbeat)."""
+    time: str                   # ISO; kada įrašą gavo kolektorius
+    uptime_s: int | None = None
+    cpus: int | None = None
+    cpu_pct: float | None = None
+    load: list[float] = []
+    mem_total_kb: int | None = None
+    mem_avail_kb: int | None = None
+    disk_used_kb: int | None = None
+    disk_avail_kb: int | None = None
+    procs: int | None = None
+    users: list[str] = []
+    programs: list[ProgramUsage] = []
+
+
+class StatusPoint(BaseModel):
+    """Vienas CPU / atminties taškas (paskutinės valandos sparkline)."""
+    time: str
+    cpu_pct: float | None = None
+    mem_pct: float | None = None
+
+
+class ActivityItem(BaseModel):
+    """Pastebimas įrenginio veiksmas (prisijungimas, sudo, paskyros pakeitimas, komanda ...)."""
+    time: str
+    kind: str                   # login | auth_failed | admin | account | command | script | boot | log_cleared | update
+    user: str = ""
+    text: str
+
+
+class DeviceDetails(BaseModel):
+    """Įrenginio detalių puslapio duomenys."""
+    status: HostStatus | None = None
+    history: list[StatusPoint] = []
+    activity: list[ActivityItem] = []
+    alerts: list[AlertItem] = []

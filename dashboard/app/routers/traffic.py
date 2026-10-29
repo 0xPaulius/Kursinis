@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import asyncio
 import datetime
-import re
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
@@ -13,12 +12,9 @@ from fastapi import APIRouter, Depends, Query
 from app.models.schemas import LogLine, LogLines, TrafficCurrent, TrafficHistory, TrafficPoint
 from app.services.loki_client import AsyncLokiClient
 from app.dependencies import get_loki, require_auth
-from app.log_selectors import logs_selector
+from app.log_selectors import logs_selector, valid_host
 
 router = APIRouter(prefix="/api/traffic", tags=["traffic"], dependencies=[Depends(require_auth)])
-
-# Leistini host etiketės simboliai — apsauga nuo LogQL injekcijos per `host` parametrą.
-_HOST_RE = re.compile(r"^[A-Za-z0-9._-]{1,255}$")
 
 
 def _ns_to_iso(ts_ns: str | int) -> str:
@@ -102,7 +98,7 @@ async def get_traffic_history(
     step = _auto_step(hours)
 
     # Jei nurodytas validus host — filtruojame pagal jį; kitaip imame visą srautą.
-    selector = logs_selector(host if host and _HOST_RE.match(host) else None)
+    selector = logs_selector(host if valid_host(host) else None)
 
     results = await loki.query_metric(
         f'sum(count_over_time({selector}[{step}]))',
@@ -161,7 +157,7 @@ async def get_traffic_logs(
     now = datetime.datetime.now(datetime.timezone.utc)
     start = now - datetime.timedelta(hours=hours)
 
-    selector = logs_selector(host if host and _HOST_RE.match(host) else None)
+    selector = logs_selector(host if valid_host(host) else None)
 
     entries = await loki.query_range(selector, start=start, end=now, limit=limit)
 

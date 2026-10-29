@@ -32,18 +32,25 @@ SELF_DEVICE_NAME = os.getenv("SELF_DEVICE_NAME", "Šis serveris")
 _IP_ONLY = re.compile(r"^\d{1,3}(\.\d{1,3}){3}$")
 
 
+def _matches(alert, ip: str, hostname: str) -> bool:
+    # source_host gali būti sąrašas „web-1, web-2" (SSH brute-force keliems host'ams).
+    hosts = {h.strip() for h in (alert.source_host or "").split(",")}
+    return bool((ip and alert.source_ip == ip) or (hostname and hostname in hosts))
+
+
+def alerts_for_device(ip: str, hostname: str, alerts: list) -> list:
+    """Įrenginio įspėjimai (pagal IP arba tikslų host vardą), ta pačia tvarka kaip `alerts`."""
+    return [a for a in alerts if _matches(a, ip, hostname)]
+
+
 def alert_summary(ip: str, hostname: str, alerts: list) -> tuple[int, str]:
     """Įrenginio įspėjimų skaičius ir blogiausias sunkumas (pagal IP arba tikslų host vardą)."""
-    count = 0
+    matched = alerts_for_device(ip, hostname, alerts)
     worst = "none"
-    for a in alerts:
-        # source_host gali būti sąrašas „web-1, web-2" (SSH brute-force keliems host'ams).
-        hosts = {h.strip() for h in (a.source_host or "").split(",")}
-        if (ip and a.source_ip == ip) or (hostname and hostname in hosts):
-            count += 1
-            if _SEV_RANK.get(a.severity, 0) > _SEV_RANK.get(worst, 0):
-                worst = a.severity
-    return count, worst
+    for a in matched:
+        if _SEV_RANK.get(a.severity, 0) > _SEV_RANK.get(worst, 0):
+            worst = a.severity
+    return len(matched), worst
 
 
 class DeviceMonitor:

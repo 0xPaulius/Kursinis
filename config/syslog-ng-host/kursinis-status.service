@@ -1,0 +1,16 @@
+# Kursinis: šio kompiuterio būsenos įrašas (veikimo laikas, CPU, atmintis, diskas, programos).
+# Įdiegia setup-host-syslog-ng.sh; kas minutę paleidžia kursinis-status.timer.
+[Unit]
+Description=Kursinis host status record
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/libexec/kursinis-status
+SyslogIdentifier=kursinis-status
+# Tik skaito /proc, df ir loginctl: laikinas neprivilegijuotas vartotojas, be tinklo ir rašymo.
+DynamicUser=yes
+NoNewPrivileges=yes
+ProtectSystem=strict
+ProtectHome=yes
+PrivateTmp=yes
+PrivateNetwork=yes
