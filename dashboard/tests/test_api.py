@@ -165,6 +165,28 @@ def test_alert_summary_matches_exact_hostnames():
     assert alert_summary("", "macbook-2", alerts) == (1, "high")
 
 
+def test_valid_host_rejects_logql_breakers():
+    from app.log_selectors import valid_host
+    assert valid_host("web-server-01") and valid_host("PC.local")
+    for bad in ("", None, 'a"b', "a}b", "a b", "web\n", "x" * 256):
+        assert not valid_host(bad), repr(bad)
+
+
+def test_alerts_for_device_keeps_order_and_matches_ip_or_host():
+    from app.services.device_monitor import alerts_for_device
+    a1 = SimpleNamespace(source_ip="10.0.0.5", source_host="", severity="high")
+    a2 = SimpleNamespace(source_ip="", source_host="web-1, pc-2", severity="low")
+    a3 = SimpleNamespace(source_ip="", source_host="pc-22", severity="low")
+    assert alerts_for_device("10.0.0.5", "pc-2", [a1, a2, a3]) == [a1, a2]
+    assert alerts_for_device("", "pc-2", [a1, a2, a3]) == [a2]
+
+
+def test_ns_to_datetime():
+    from app.services.loki_client import ns_to_datetime
+    assert ns_to_datetime("1793260800000000000").isoformat() == "2026-10-29T08:00:00+00:00"
+    assert ns_to_datetime("x") is None and ns_to_datetime(None) is None
+
+
 def test_alert_id_distinguishes_event_keys_and_keeps_old_ids():
     import hashlib
     from app.services.alert_reader import _alert_id

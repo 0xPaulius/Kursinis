@@ -19,6 +19,16 @@ def _to_ns(dt: datetime.datetime) -> int:
     return int(dt.timestamp() * _NS)
 
 
+def ns_to_datetime(ts: str | int | None) -> datetime.datetime | None:
+    """Loki įrašo laikas (nanosekundės) -> UTC datetime; None, jei reikšmė netinkama."""
+    if ts is None:
+        return None
+    try:
+        return datetime.datetime.fromtimestamp(int(ts) / _NS, tz=datetime.timezone.utc)
+    except (TypeError, ValueError, OverflowError, OSError):
+        return None
+
+
 class AsyncLokiClient:
     """Async Loki HTTP klientas su graceful degradation."""
 
