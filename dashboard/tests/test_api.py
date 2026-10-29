@@ -194,14 +194,16 @@ class _DetailsLoki:
     """Netikras Loki detalių užklausoms: atsakymas pagal užklausos srautą."""
 
     def __init__(self):
-        self.rows = {"status": [], "syslog": [], "windows": []}
+        self.rows = {"status": [], "syslog": [], "commands": [], "windows": [], "processes": []}
         self.queries: list[str] = []
 
     async def query_range(self, query, start=None, end=None, limit=5000):
         self.queries.append(query)
         if 'program="kursinis-status"' in query:
             return self.rows["status"]
-        return self.rows["windows" if 'job="windows"' in query else "syslog"]
+        if 'job="windows"' in query:
+            return self.rows["processes" if "Sysmon" in query else "windows"]
+        return self.rows["commands" if "type=EXECVE" in query else "syslog"]
 
 
 def _row(line: str, minutes_ago: float = 1) -> dict:
@@ -243,7 +245,18 @@ def test_device_details_for_this_server(client, details):
     assert body["status"]["cpu_pct"] == 12.5 and body["status"]["programs"][0]["name"] == "firefox"
     assert [p["mem_pct"] for p in body["history"]] == [75.0]
     assert [(a["kind"], a["user"]) for a in body["activity"]] == [("admin", "oxshan")]
-    assert len(details.queries) == 3 and all('host="testhost"' in q for q in details.queries)
+    assert len(details.queries) == 5 and all('host="testhost"' in q for q in details.queries)
+
+
+def test_device_details_commands_do_not_crowd_out_rare_events(client, details):
+    """Dažni procesų paleidimai (EXECVE, Sysmon 1) — atskira užklausa ir ne daugiau 25 eilučių sraute."""
+    details.rows["commands"] = [
+        _row(f'2026-10-29T12:00:00+00:00 testhost user.info audisp-syslog[1]: '
+             f'type=EXECVE msg=audit(1:{i}): argc=1 a0="ls"', 1 + i / 100) for i in range(60)]
+    details.rows["syslog"] = [
+        _row("2026-10-29T12:00:00+00:00 testhost auth.notice useradd[5]: new user: name=backdoor, UID=1001", 300)]
+    kinds = [a["kind"] for a in client.get("/api/devices/self/details", headers=_login(client)).json()["activity"]]
+    assert kinds.count("command") == 25 and kinds[-1] == "account"
 
 
 def test_device_details_alerts_match_hostname(client, details, env):

@@ -96,6 +96,25 @@ def test_demo_device_lines(program, message, expected):
     assert found(syslog(program, message)) == expected
 
 
+@pytest.mark.parametrize("program", ["sshd-session", "sshd-auth"])
+def test_openssh_split_processes(program):
+    """OpenSSH ≥ 9.8 (šiame PC 10.6) rašo ne „sshd", o „sshd-session" / „sshd-auth"."""
+    assert found(syslog(program, "Accepted publickey for deploy from 192.168.1.50 port 51022 ssh2")) == \
+        ("login", "deploy", "SSH login from 192.168.1.50 (publickey)")
+    assert found(syslog(program, "Failed password for root from 203.0.113.7 port 40001 ssh2")) == \
+        ("auth_failed", "root", "SSH login failed from 203.0.113.7")
+    assert classify(syslog(program, "pam_unix(sshd:auth): authentication failure; logname= uid=0 euid=0 "
+                                    "tty=ssh ruser= rhost=203.0.113.7  user=root")) is None
+
+
+@pytest.mark.parametrize("program, message, expected", [
+    ("gpasswd", "user bob added by root to group wheel", ("account", "bob", "bob added to group wheel by root")),
+    ("useradd", "add 'bob' to group 'wheel'", ("account", "bob", "bob added to group wheel")),
+], ids=["gpasswd", "useradd-G"])
+def test_group_additions(program, message, expected):
+    assert found(syslog(program, message)) == expected
+
+
 def test_raw_audit_line_without_syslog_prefix():
     entry = {"timestamp": TS, "line": 'type=EXECVE msg=audit(1:3): argc=2 a0="bash" a1="-i"',
              "labels": {"job": "linux_endpoint", "host": "lab"}}
@@ -181,3 +200,22 @@ def test_windows_events(entry, expected):
 ], ids=["4624-service", "4624-network", "4104-verbose", "eid1-not-sysmon", "sysmon-3", "bad-json"])
 def test_windows_noise(entry):
     assert classify(entry) is None
+
+
+def test_large_windows_events_still_classify():
+    """Windows JSON eilutės dažnai > 4 KB (scenarijaus blokas, užkoduota komanda)."""
+    script = win(4104, {"ScriptBlockText": "IEX " + "A" * 5000},
+                 channel="Microsoft-Windows-PowerShell/Operational", levelText="Warning")
+    process = win(1, {"Image": "C:\\Windows\\powershell.exe", "CommandLine": "powershell -enc " + "QQBB" * 1500,
+                      "User": "LAB\\jdoe"}, channel="Microsoft-Windows-Sysmon/Operational")
+    assert len(script["line"]) > 4096 and len(process["line"]) > 4096
+    assert found(script)[0] == "script" and found(process)[0] == "command"
+
+
+def test_hostile_windows_line_is_fast():
+    obj = {"event_id": 4720, "channel": "Security", "event_data": '<Data Name="a">' * 7000}
+    entry = {"timestamp": TS, "line": json.dumps(obj), "labels": {"job": "windows"}}
+    started = time.perf_counter()
+    for _ in range(5):
+        classify(entry)
+    assert time.perf_counter() - started < 1.0

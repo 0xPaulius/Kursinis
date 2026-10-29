@@ -31,10 +31,21 @@ const KIND_META = {
 };
 
 // „self" — visada savo serveris: aptiktas host'as, pasivadinęs „self", jo puslapio neperima.
+// Žemėlapyje tik per paskutinę valandą logus siuntę host'ai; jei įrenginio ten nėra, bet
+// detalės (24 val.) turi duomenų — įrenginys sudaromas iš rakto.
 function currentDevice() {
   const key = state.deviceKey;
-  return state.devices.find(d => (key === "self" ? d.source === "self"
-                                                 : d.source !== "self" && d.hostname === key)) || null;
+  const fromMap = state.devices.find(d => (key === "self" ? d.source === "self"
+                                                          : d.source !== "self" && d.hostname === key));
+  if (fromMap) return fromMap;
+  const detail = currentDetail();
+  if (!detail || !(detail.status || detail.activity.length || detail.alerts.length)) return null;
+  const self = key === "self";
+  return {
+    name: self ? t("src_self") : key, hostname: self ? "" : key, source: self ? "self" : "discovered",
+    ip: "", os: "unknown", os_version: "", online: false, logs_5m: 0, logs_1h: 0, last_seen: null,
+    alert_count: detail.alerts.length,
+  };
 }
 
 // Detalės rodomos tik to įrenginio, kurio raktas dabar URL'e.
@@ -79,6 +90,10 @@ export async function loadDeviceDetail() {
 async function loadDeviceLogs() {
   const d = currentDevice();
   if (!d) return;
+  if (!d.hostname) {          // savo serveris ne žemėlapyje — host'o vardo nežinome (be jo API grąžintų visų logus)
+    state.deviceLogs = [];
+    return;
+  }
   try {
     const data = await fetchJSON(`/api/traffic/logs?limit=${LOG_LIMIT}&host=${encodeURIComponent(d.hostname)}`);
     if (deviceKey(d) === state.deviceKey) state.deviceLogs = data.lines || [];
@@ -108,8 +123,11 @@ function sortPrograms(by) {
 // -- Piešimas -------------------------------------------------------------------
 
 export function renderDeviceDetail() {
+  // Vėluojantis atsakymas (pvz. „Visi logai") po perėjimo į kitą puslapį nieko nepiešia.
+  if (state.page !== "devices" || !state.deviceKey) return;
   const d = currentDevice();
-  const missing = state.devicesLoaded && !d;
+  // „Nerastas" — tik kai žemėlapis ir detalės gauti, o duomenų nėra (kitaip dar kraunama).
+  const missing = state.devicesLoaded && !d && currentDetail() !== null;
   el("dd-notfound")?.classList.toggle("hidden", !missing);
   el("dd-body")?.classList.toggle("hidden", missing);
   setCrumb(d ? `${t("nav_devices")} › ${d.name}` : t("nav_devices"));
@@ -150,8 +168,8 @@ function renderTiles(d, detail) {
     return;
   }
   const s = status || {};
-  // Veikimo laikas „bėga" ir tarp įrašų.
-  const age = status ? Math.max(0, (Date.now() - new Date(status.time).getTime()) / 1000) : 0;
+  // Veikimo laikas „bėga" tarp įrašų; pasenusiam — paskutinė žinoma reikšmė (gal išjungtas).
+  const age = status && !isStale(status) ? Math.max(0, (Date.now() - new Date(status.time).getTime()) / 1000) : 0;
   setText("dd-uptime", s.uptime_s != null ? durationFmt(s.uptime_s + age) : "—");
   setText("dd-cpu", pctFmt(s.cpu_pct));
   setText("dd-cpu-sub", s.cpus ? t("dd_cpu_sub")(s.cpus) : "");
