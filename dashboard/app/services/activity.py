@@ -5,11 +5,16 @@ classify() verčia Loki įrašą į ActivityItem arba None (ne veiksmas). Syslog
 skaidomos pagal kolektoriaus syslog-ng šabloną į programą ir žinutę; Windows įvykiai —
 Alloy windowsevent JSON. Taisyklės tikrinamos eilės tvarka, galioja pirmoji tikusi.
 Taisyklių pasirinkimas: docs/superpowers/specs/2026-10-29-device-detail-design.md (4.7).
+
+Eilutes gali siųsti bet kas (syslog be autentifikacijos): per ilgos praleidžiamos, o
+reguliarieji reiškiniai parašyti be kvadratinio „backtracking" (tik vienas pradžios taškas
+arba ribotas fragmentas).
 """
 from __future__ import annotations
 
 import json
 import re
+import unicodedata
 from collections.abc import Callable
 from dataclasses import dataclass
 
@@ -18,6 +23,7 @@ from app.services.loki_client import ns_to_datetime
 
 TEXT_LIMIT = 200
 USER_LIMIT = 64
+MAX_LINE_LENGTH = 4096   # ilgesnės eilutės — ne veiksmai (ir regex darbo riba)
 
 # Loki užklausų filtrai (device_details.py): syslog — RE2 eilučių filtras, Windows — įvykių ID.
 SYSLOG_PREFILTER = "|".join((  # noqa: FLY002 — po vieną alternatyvą, kad būtų skaitoma
@@ -82,14 +88,16 @@ _SYSLOG_RULES: tuple[_Rule, ...] = (
           r"^New session '?(?P<id>[^' ]+?)'? of user '?(?P<user>[^' ]+?)'?(?: with class '(?P<cls>[^']+)'|\.?$)",
           "login", _logind),
     # sudo: „user : <priežastis> ; ... COMMAND=" — nesėkmė; „user : TTY=... ; COMMAND=" — komanda.
-    _rule({"sudo"}, r"^\s*(\S+) : ([^;=]+?)\s*;.*COMMAND=", "auth_failed",
+    # Priežastis baigiasi ne tarpu prieš „ ;" — taip reiškinys lieka tiesinis.
+    _rule({"sudo"}, r"^\s*(\S+) : ([^;=]*[^;=\s]) ;.*COMMAND=", "auth_failed",
           lambda m, p: (m[1], f"sudo: {m[2]}")),
     _rule({"sudo"}, r"^\s*(\S+) : .*COMMAND=(.+)$", "admin",
           lambda m, p: (m[1], f"sudo {m[2]}")),
     _rule({"su", "su-l"}, r"session opened for user root(?:\(uid=0\))? by ([^\s(]+)", "admin",
           lambda m, p: (m[1], "su to root")),
     # sshd ir sudo nesėkmes aprašo savo eilutės — pam dublikatų nerodome.
-    _rule(None, r"authentication failure;.*\buser=(\S+)", "auth_failed",
+    # „user=" ieškoma tik iki kito „;" (kitaip kiekvienas pakartojimas skenuotų iki galo).
+    _rule(None, r"authentication failure;[^;]*\buser=(\S+)", "auth_failed",
           lambda m, p: (m[1], f"{p}: authentication failure"), exclude={"sshd", "sudo"}),
     _rule({"useradd"}, r"^new user: name=([^,\s]+)", "account",
           lambda m, p: (m[1], f"User {m[1]} created")),
@@ -103,7 +111,8 @@ _SYSLOG_RULES: tuple[_Rule, ...] = (
           lambda m, p: (m[1], f"Password changed for {m[1]}")),
     _rule({"kernel"}, r"^Linux version (\S+)", "boot",
           lambda m, p: ("", f"System booted (Linux {m[1]})")),
-    _rule(None, r"type=EXECVE\b.*?\bargc=\d+\s(.*)$", "command",
+    # auditd įrašas žinutės pradžioje (audisp-syslog arba žalias linux_endpoint įrašas).
+    _rule(None, r"^(?:node=\S+ )?type=EXECVE msg=audit\([^)]*\): argc=\d+ (.*)$", "command",
           lambda m, p: ("", _execve_command(m[1]))),
     # Demonstraciniai įrenginiai (services/syslog_emitter.py šablonai)
     _rule({"loginwindow"}, r"USER_PROCESS: user (\S+) session opened", "login",
@@ -177,21 +186,23 @@ def _classify_windows(obj: dict) -> Found | None:
     return None
 
 
-def _clip(text: str) -> str:
+def _clean(text: str, limit: int) -> str:
+    """Valdymo ir formatavimo (pvz. bidi) simboliai -> tarpai, tarpai suspaudžiami, ilgis ribojamas."""
+    text = "".join(" " if unicodedata.category(ch) in ("Cc", "Cf") else ch for ch in text)
     text = " ".join(text.split())
-    return text if len(text) <= TEXT_LIMIT else text[:TEXT_LIMIT - 1] + "…"
+    return text if len(text) <= limit else text[:limit - 1] + "…"
 
 
 def classify(entry: dict) -> ActivityItem | None:
     """Loki įrašas ({timestamp, line, labels}) -> ActivityItem; None, jei tai ne veiksmas."""
     when = ns_to_datetime(entry.get("timestamp"))
     line = entry.get("line") or ""
-    if when is None or not line:
+    if when is None or not line or len(line) > MAX_LINE_LENGTH:
         return None
     if (entry.get("labels") or {}).get("job") == "windows":
         try:
             obj = json.loads(line)
-        except ValueError:
+        except (ValueError, RecursionError):
             return None
         hit = _classify_windows(obj) if isinstance(obj, dict) else None
     else:
@@ -199,4 +210,5 @@ def classify(entry: dict) -> ActivityItem | None:
     if hit is None:
         return None
     kind, user, text = hit
-    return ActivityItem(time=when.isoformat(), kind=kind, user=user[:USER_LIMIT], text=_clip(text))
+    return ActivityItem(time=when.isoformat(), kind=kind,
+                        user=_clean(user, USER_LIMIT), text=_clean(text, TEXT_LIMIT))

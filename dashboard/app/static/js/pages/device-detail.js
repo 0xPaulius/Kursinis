@@ -30,8 +30,11 @@ const KIND_META = {
   update:      { icon: "system_update" },
 };
 
+// „self" — visada savo serveris: aptiktas host'as, pasivadinęs „self", jo puslapio neperima.
 function currentDevice() {
-  return state.devices.find(d => deviceKey(d) === state.deviceKey) || null;
+  const key = state.deviceKey;
+  return state.devices.find(d => (key === "self" ? d.source === "self"
+                                                 : d.source !== "self" && d.hostname === key)) || null;
 }
 
 // Detalės rodomos tik to įrenginio, kurio raktas dabar URL'e.
