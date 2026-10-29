@@ -7,6 +7,7 @@ from fastapi import Depends, Header, HTTPException, Request
 
 from app.routers.auth import verify_session
 from app.services.alert_reader import AlertReader
+from app.services.device_details import DeviceDetailsService
 from app.services.device_monitor import DeviceMonitor
 from app.services.device_registry import DeviceRegistry
 from app.services.loki_client import AsyncLokiClient
@@ -36,6 +37,10 @@ def get_syslog_emitter(request: Request) -> SyslogEmitter:
 
 def get_device_monitor(request: Request) -> DeviceMonitor:
     return request.app.state.device_monitor
+
+
+def get_device_details(request: Request) -> DeviceDetailsService:
+    return request.app.state.device_details
 
 
 def get_notifier(request: Request):

@@ -6,6 +6,7 @@ from __future__ import annotations
 
 import asyncio
 import datetime
+import json
 import os
 import time
 from types import SimpleNamespace
@@ -185,6 +186,95 @@ def test_ns_to_datetime():
     from app.services.loki_client import ns_to_datetime
     assert ns_to_datetime("1793260800000000000").isoformat() == "2026-10-29T08:00:00+00:00"
     assert ns_to_datetime("x") is None and ns_to_datetime(None) is None
+
+
+# -- Įrenginio detalės ------------------------------------------------------------
+
+class _DetailsLoki:
+    """Netikras Loki detalių užklausoms: atsakymas pagal užklausos srautą."""
+
+    def __init__(self):
+        self.rows = {"status": [], "syslog": [], "windows": []}
+        self.queries: list[str] = []
+
+    async def query_range(self, query, start=None, end=None, limit=5000):
+        self.queries.append(query)
+        if 'program="kursinis-status"' in query:
+            return self.rows["status"]
+        return self.rows["windows" if 'job="windows"' in query else "syslog"]
+
+
+def _row(line: str, minutes_ago: float = 1) -> dict:
+    ts = datetime.datetime.now(datetime.timezone.utc) - datetime.timedelta(minutes=minutes_ago)
+    return {"timestamp": str(int(ts.timestamp()) * 10**9), "line": line, "labels": {"job": "syslog"}}
+
+
+@pytest.fixture
+def details(env, tmp_path):
+    """Detalių paslauga su netikru Loki; šio serverio vardas — „testhost"."""
+    from app.dependencies import get_device_details
+    from app.services.alert_reader import AlertReader
+    from app.services.device_details import DeviceDetailsService
+    from app.services.device_registry import DeviceRegistry
+    from app.services.host_info import HostInfo
+
+    host_dir = tmp_path / "host"
+    host_dir.mkdir()
+    (host_dir / "hostname").write_text("testhost\n")
+    loki = _DetailsLoki()
+    service = DeviceDetailsService(loki, DeviceRegistry(), AlertReader(), HostInfo(str(host_dir)))
+    env.app.dependency_overrides[get_device_details] = lambda: service
+    yield loki
+    env.app.dependency_overrides.clear()
+
+
+def test_device_details_for_this_server(client, details):
+    record = ('{"v":1,"cpu_pct":12.5,"mem_total_kb":1000,"mem_avail_kb":250,'
+              '"top":[{"name":"firefox","n":3,"cpu":4.5,"mem_kb":5000}]}')
+    details.rows["status"] = [_row(f"2026-10-29T12:00:00+00:00 testhost daemon.info kursinis-status[7]: {record}")]
+    details.rows["syslog"] = [
+        _row("2026-10-29T12:00:00+00:00 testhost auth.notice sudo[9]:   oxshan : TTY=pts/0 ; PWD=/ ; "
+             "USER=root ; COMMAND=/usr/bin/id", 2),
+        _row("2026-10-29T12:00:00+00:00 testhost daemon.info systemd[1]: Started Daily apt download activities.", 3),
+    ]
+    resp = client.get("/api/devices/self/details", headers=_login(client))
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["status"]["cpu_pct"] == 12.5 and body["status"]["programs"][0]["name"] == "firefox"
+    assert [p["mem_pct"] for p in body["history"]] == [75.0]
+    assert [(a["kind"], a["user"]) for a in body["activity"]] == [("admin", "oxshan")]
+    assert len(details.queries) == 3 and all('host="testhost"' in q for q in details.queries)
+
+
+def test_device_details_alerts_match_hostname(client, details, env):
+    (env.tmp / "anomaly_history.json").write_text(json.dumps([
+        {"timestamp": "2026-10-29T10:00:00+00:00", "alert_type": "ssh_bruteforce", "severity": "high",
+         "source_ip": "203.0.113.7", "source_host": "web-server-01", "detection_method": "rule", "details": {}},
+        {"timestamp": "2026-10-29T11:00:00+00:00", "alert_type": "firewall_spike", "severity": "medium",
+         "source_ip": "203.0.113.7", "source_host": "router-01", "detection_method": "rule", "details": {}},
+    ]))
+    body = client.get("/api/devices/web-server-01/details", headers=_login(client)).json()
+    assert body["status"] is None and body["history"] == [] and body["activity"] == []
+    assert [a["alert_type"] for a in body["alerts"]] == ["ssh_bruteforce"]
+
+
+@pytest.mark.parametrize("key", ["bad host", 'x"y', "a" * 256])
+def test_device_details_rejects_bad_keys(client, details, key):
+    from urllib.parse import quote
+    assert client.get(f"/api/devices/{quote(key, safe='')}/details", headers=_login(client)).status_code == 404
+    assert details.queries == []
+
+
+def test_device_details_self_needs_host_info(tmp_path):
+    from app.services.device_details import DeviceDetailsService, DeviceNotFound
+    from app.services.host_info import HostInfo
+    service = DeviceDetailsService(_DetailsLoki(), registry=None, alert_reader=None, host_info=HostInfo(str(tmp_path)))
+    with pytest.raises(DeviceNotFound):
+        service.resolve("self")
+
+
+def test_device_details_requires_login(client):
+    assert client.get("/api/devices/self/details").status_code == 401
 
 
 def test_alert_id_distinguishes_event_keys_and_keeps_old_ids():

@@ -23,6 +23,7 @@ from fastapi.staticfiles import StaticFiles
 
 from app.routers import traffic, alerts, health, auth, devices, stream, notifications, attack
 from app.services.alert_reader import AlertReader
+from app.services.device_details import DeviceDetailsService
 from app.services.device_monitor import DeviceMonitor
 from app.services.device_registry import DeviceRegistry
 from app.services.host_info import HostInfo
@@ -91,6 +92,12 @@ async def lifespan(app: FastAPI):
         app.state.syslog_emitter = SyslogEmitter()
         app.state.host_info = HostInfo()
         app.state.device_monitor = DeviceMonitor(
+            loki=loki,
+            registry=app.state.device_registry,
+            alert_reader=app.state.alert_reader,
+            host_info=app.state.host_info,
+        )
+        app.state.device_details = DeviceDetailsService(
             loki=loki,
             registry=app.state.device_registry,
             alert_reader=app.state.alert_reader,
