@@ -277,6 +277,25 @@ def test_device_details_requires_login(client):
     assert client.get("/api/devices/self/details").status_code == 401
 
 
+def test_device_details_survives_rows_that_break_the_classifier(client, details, monkeypatch):
+    import app.services.device_details as device_details
+    real_classify = device_details.classify
+
+    def flaky(row):
+        if "boom" in row["line"]:
+            raise RuntimeError("boom")
+        return real_classify(row)
+
+    monkeypatch.setattr(device_details, "classify", flaky)
+    details.rows["syslog"] = [
+        _row("2026-10-29T12:00:00+00:00 testhost auth.notice sudo[9]:   oxshan : TTY=pts/0 ; PWD=/ ; "
+             "USER=root ; COMMAND=/usr/bin/id", 1),
+        _row("boom", 2),
+    ]
+    body = client.get("/api/devices/self/details", headers=_login(client)).json()
+    assert [a["kind"] for a in body["activity"]] == ["admin"]
+
+
 def test_alert_id_distinguishes_event_keys_and_keeps_old_ids():
     import hashlib
     from app.services.alert_reader import _alert_id

@@ -107,7 +107,8 @@ Example (one line in reality):
 ### 4.3 Status collector on this PC
 
 - `kursinis-status.sh` is bash with awk and coreutils (no Python), reading `/proc`, `df` and `loginctl`. It always prints exactly one valid JSON line, even if a source fails.
-- `kursinis-status.service`: `Type=oneshot`, `ExecStart=/usr/local/libexec/kursinis-status`, `SyslogIdentifier=kursinis-status`, `DynamicUser=yes`, `NoNewPrivileges=yes`, `ProtectSystem=strict`, `ProtectHome=yes`, `PrivateTmp=yes`, `PrivateNetwork=yes`. `/proc` stays fully visible (no `ProtectProc`), so all processes are counted.
+- `kursinis-status.service`: `Type=oneshot`, `ExecStart=/usr/local/libexec/kursinis-status`, `SyslogIdentifier=kursinis-status`, `TimeoutStartSec=30` (a hung `loginctl` would otherwise stop the timer for good), `DynamicUser=yes` and a full sandbox: no capabilities, no network (`PrivateNetwork`, only `AF_UNIX` for D-Bus), read-only system, hidden home, private `/tmp` and `/dev`, kernel/cgroup/clock/hostname protection, `@system-service` syscall filter, `MemoryDenyWriteExecute` (`systemd-analyze security`: 0.9 SAFE). `/proc` stays fully visible (no `ProtectProc`), so all processes are counted.
+- Process names are emitted as printable ASCII (anything else becomes `?`, an empty name is `?`, a name with a newline is rejoined); the JSON escaping avoids `gsub` replacement strings, so the script behaves the same under gawk and mawk (Debian/Ubuntu).
 - `kursinis-status.timer`: `OnBootSec=1min`, `OnUnitActiveSec=1min`, `AccuracySec=1s`, `WantedBy=timers.target`.
 - `setup-host-syslog-ng.sh` gains a step that installs the script to `/usr/local/libexec/kursinis-status` (0755), the units to `/etc/systemd/system/`, runs `daemon-reload`, enables the timer and starts the service once so the first record arrives right away. Re-running the setup script stays safe.
 
@@ -150,7 +151,7 @@ The "All logs" tab reuses `GET /api/traffic/logs?host=<hostname>&limit=100`.
 
 Status records are untrusted: anyone who can reach UDP 514 can send a line that claims to be any host. `host_status.py`:
 
-- Takes the JSON from the stored line with `kursinis-status\[\d*\]: (\{.*\})$`; lines over 16 KB are skipped.
+- Takes the JSON from the stored line, anchored to the template (`^<time> <host> <facility>.<level> kursinis-status[<pid>]: {…}$`, so the text can't hide inside another program's message); lines over 8 KB are skipped. Program and user names must be printable ASCII (the script never sends anything else, so bidi or control characters mean a forged record).
 - Validates it with a strict Pydantic model. A record that fails is skipped (logged at debug), never repaired.
 
 | Rule | Limit |
@@ -167,7 +168,7 @@ Status records are untrusted: anyone who can reach UDP 514 can send a line that 
 
 ### 4.7 Activity classification
 
-`activity.py` turns a Loki entry into an `ActivityItem` or `None`. Kinds: `login`, `auth_failed`, `admin`, `account`, `command`, `script`, `boot`, `log_cleared`, `update`. `text` is cut to 200 characters.
+`activity.py` turns a Loki entry into an `ActivityItem` or `None`. Kinds: `login`, `auth_failed`, `admin`, `account`, `command`, `script`, `boot`, `log_cleared`, `update`. `text` is cut to 200 characters; control and format (bidi) characters in `user` and `text` become spaces. Lines longer than 4 KB are skipped, every pattern is anchored or bounded (no quadratic backtracking on attacker-shaped lines), JSON nesting errors are caught, and `device_details.py` runs the parsing in a worker thread and skips (with a warning) any row that still makes the classifier fail.
 
 Syslog-family lines are split into program and message with the collector's template (`<time> <host> <facility>.<level> <program>[<pid>]: <message>`). A line that doesn't fit (a raw auditd line from `linux_endpoint`) is classified on its whole text with an empty program. Program names are compared case-insensitively. Rules are tried in table order and the first match wins (so a sudo line with "incorrect password attempts" is `auth_failed`, not `admin`).
 
@@ -249,11 +250,14 @@ The matching in `device_monitor.alert_summary` (alert `source_ip` equals the dev
 
 ## 6. Security
 
-- The key is validated before it reaches LogQL; `self` is resolved on the server.
+- The key is validated before it reaches LogQL; `self` is resolved on the server and always means this PC in the frontend too (a discovered host named "self" can't take over its page).
 - Status records are validated with size limits and rendered only through `textContent`; the frontend keeps the "no inline handlers or scripts" rule.
-- No command lines in status records. Activity texts (commands that are already in the raw logs) are capped at 200 characters.
+- No command lines in status records. Activity texts are capped at 200 characters.
 - The status service runs as a dynamic unprivileged user in a sandbox without network access.
-- No new exposure: viewers can already read raw logs, and the username on the page was already visible in them.
+- Denial of service: log lines are attacker-controlled, so classification is bounded (4.7) and runs off the event loop. Measured on 500 rows of 4 KB crafted lines: at most ~25 ms per request and ≤ 6 ms of event-loop delay (13 s before the fix with 8 KB lines).
+- **Status records are not authenticated.** Anyone who can send syslog to the collector, and any local user of this PC (`logger -t kursinis-status '{…}'`), can forge a record for a host; the newest valid record wins. This is the trust level of every syslog line in the system. Signing records (a per-host key readable only by the service) would fix it and is out of scope.
+- What the role `viewer` sees: besides data already visible in raw logs (sudo and Sysmon command lines), the page adds this PC's process names, logged-in user names and decoded auditd arguments (raw logs show them hex-encoded). Limiting programs and commands to `admin` is a possible follow-up.
+- Pre-existing, outside this feature: the collector's network sources don't use `flags(no-multi-line)`, so a syslog message with an embedded newline becomes two lines in the files Alloy reads, the second one fully controlled by the sender (time, host, program). Worth fixing for the whole pipeline.
 
 ## 7. Testing
 

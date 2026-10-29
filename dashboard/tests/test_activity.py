@@ -3,6 +3,7 @@ from __future__ import annotations
 
 import datetime
 import json
+import time
 
 import pytest
 
@@ -109,6 +110,30 @@ def test_text_is_capped_and_time_is_iso():
 
 def test_entry_without_valid_timestamp_is_skipped():
     assert classify({**syslog("kernel", "Linux version 7.3.0 (x)"), "timestamp": "?"}) is None
+
+
+def test_hostile_lines_classify_fast():
+    """Syslog'ą gali siųsti bet kas: piktybinės eilutės negali ilgam užimti serverio (regex backtracking)."""
+    hostile = [
+        syslog("sudo", "  u : " + " " * 1900 + "authentication failure"),
+        syslog("sudo", "  u : " + " " * 8000 + "authentication failure"),
+        syslog("audit", "type=EXECVE " * 170),
+        syslog("su", "authentication failure; " * 80),
+    ]
+    started = time.perf_counter()
+    for _ in range(250):
+        for entry in hostile:
+            assert classify(entry) is None
+    assert time.perf_counter() - started < 1.0
+
+
+def test_deeply_nested_windows_json_is_skipped():
+    assert classify({"timestamp": TS, "line": "[" * 20000 + "]" * 20000, "labels": {"job": "windows"}}) is None
+
+
+def test_control_and_bidi_characters_are_removed():
+    item = classify(syslog("sudo", "  bob : TTY=pts/0 ; PWD=/ ; USER=root ; COMMAND=/bin/echo a\u202eb\x07c"))
+    assert item is not None and item.text == "sudo /bin/echo a b c"
 
 
 def win(event_id: int, data: dict, channel: str = "Security", **extra) -> dict:

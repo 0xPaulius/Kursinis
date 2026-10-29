@@ -7,10 +7,29 @@ Description=Kursinis host status record
 Type=oneshot
 ExecStart=/usr/local/libexec/kursinis-status
 SyslogIdentifier=kursinis-status
-# Tik skaito /proc, df ir loginctl: laikinas neprivilegijuotas vartotojas, be tinklo ir rašymo.
+# oneshot be ribos laukia amžinai: pakibęs loginctl ar df sustabdytų laikmatį.
+TimeoutStartSec=30
+# Tik skaito /proc, df ir loginctl (D-Bus per AF_UNIX): laikinas neprivilegijuotas vartotojas,
+# be tinklo, rašymo ir teisių. /proc nesiaurinamas (ProtectProc) — reikia matyti visus procesus.
 DynamicUser=yes
+CapabilityBoundingSet=
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
 PrivateTmp=yes
+PrivateDevices=yes
 PrivateNetwork=yes
+RestrictAddressFamilies=AF_UNIX
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectKernelLogs=yes
+ProtectControlGroups=yes
+ProtectClock=yes
+ProtectHostname=yes
+RestrictNamespaces=yes
+RestrictRealtime=yes
+LockPersonality=yes
+MemoryDenyWriteExecute=yes
+SystemCallArchitectures=native
+SystemCallFilter=@system-service
+UMask=0077

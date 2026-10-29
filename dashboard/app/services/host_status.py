@@ -22,13 +22,15 @@ logger = logging.getLogger(__name__)
 
 STATUS_PROGRAM = "kursinis-status"
 HISTORY_WINDOW = datetime.timedelta(hours=1)
-MAX_LINE_LENGTH = 16_384
+MAX_LINE_LENGTH = 8192   # tikras įrašas ~1–3 KB
 
-_STATUS_RE = re.compile(r"kursinis-status\[\d*\]: (\{.*\})\s*$")
+# Visa syslog-ng šablono eilutė: <laikas> <host> <facility>.<level> kursinis-status[<pid>]: {JSON}
+_STATUS_RE = re.compile(r"^\S+\s+\S+\s+\S+\s+kursinis-status\[\d*\]: (\{.*\})\s*$")
 
 _Pct = Annotated[float, Field(ge=0, le=100, allow_inf_nan=False)]
 _Kb = Annotated[int, Field(ge=0, le=2**50)]
-_Name = Annotated[str, Field(min_length=1, max_length=64)]
+# Skriptas siunčia tik spausdinamą ASCII (kita -> „?"): bidi ar valdymo simboliai — suklastota.
+_Name = Annotated[str, Field(min_length=1, max_length=64, pattern=r"^[\x20-\x7e]+$")]
 _Load = Annotated[float, Field(ge=0, le=1e6, allow_inf_nan=False)]
 
 
@@ -74,7 +76,7 @@ def parse_status_line(line: str) -> StatusRecord | None:
     """Loki eilutė -> StatusRecord; None, jei tai ne būsenos įrašas arba jis netinkamas."""
     if len(line) > MAX_LINE_LENGTH:
         return None
-    match = _STATUS_RE.search(line)
+    match = _STATUS_RE.match(line)
     if not match:
         return None
     try:

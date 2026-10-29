@@ -13,8 +13,18 @@ export LC_ALL=C
 SAMPLE_SECONDS="${SAMPLE_SECONDS:-1}"   # CPU matavimo langas
 TOP_N="${TOP_N:-10}"                    # programų pagal CPU ir pagal atmintį (iš viso <= 2*TOP_N)
 
-# JSON eilutė: kabutės ir \ ekranuojami, valdymo ir ne ASCII baitai -> „?".
-JS='function js(s) { gsub(/\\/, "\\\\", s); gsub(/"/, "\\\"", s); gsub(/[\001-\037\177-\377]/, "?", s); return "\"" s "\"" }'
+# JSON eilutė: kabutės ir \ ekranuojami, valdymo ir ne ASCII baitai -> „?". Po simbolį, be gsub
+# pakeitimo eilučių — jų „\\" taisyklės gawk ir mawk (Debian) skiriasi.
+JS='function js(s,   i, c, o) {
+  o = ""
+  for (i = 1; i <= length(s); i++) {
+    c = substr(s, i, 1)
+    if (c == "\\" || c == "\"") o = o "\\" c
+    else if (c < " " || c > "~") o = o "?"
+    else o = o c
+  }
+  return "\"" o "\""
+}'
 
 # /proc/stat „cpu" eilutė -> "total busy" tick'ai (guest jau įskaičiuotas į user).
 cpu_ticks() {
@@ -22,16 +32,22 @@ cpu_ticks() {
 }
 
 # Procesai: pid, sesija, ppid, utime+stime, rss (puslapiais), vardas. Vardas (comm) gali
-# turėti tarpų ir „)", todėl laukai skaitomi nuo paskutinio „)".
+# turėti tarpų ir „)", todėl laukai skaitomi nuo paskutinio „)"; tuščias vardas -> „?".
+# „\n" varde suskaido stat eilutę — tęsinys (ne „<pid> (" pradžia) prijungiamas su „?".
 proc_snapshot() {
-  cat /proc/[0-9]*/stat 2>/dev/null | awk '{
-    l = index($0, " ("); r = 0
-    for (i = length($0); i > l; i--) if (substr($0, i, 1) == ")") { r = i; break }
-    if (!l || !r) next
-    name = substr($0, l + 2, r - l - 2); gsub(/\t/, " ", name)
-    split(substr($0, r + 2), f, " ")
-    printf "%s\t%s\t%s\t%d\t%d\t%s\n", substr($0, 1, l - 1), f[4], f[2], f[12] + f[13], f[22], name
-  }'
+  cat /proc/[0-9]*/stat 2>/dev/null | awk '
+    function emit(s,   l, r, i, name, f) {
+      l = index(s, " ("); r = 0
+      for (i = length(s); i > l; i--) if (substr(s, i, 1) == ")") { r = i; break }
+      if (!l || !r) return
+      name = substr(s, l + 2, r - l - 2); gsub(/\t/, " ", name)
+      if (name == "") name = "?"
+      split(substr(s, r + 2), f, " ")
+      printf "%s\t%s\t%s\t%d\t%d\t%s\n", substr(s, 1, l - 1), f[4], f[2], f[12] + f[13], f[22], name
+    }
+    /^[0-9]+ \(/ { if (buf != "") emit(buf); buf = $0; next }
+    { buf = buf "?" $0 }
+    END { if (buf != "") emit(buf) }'
 }
 
 read -r t0 b0 < <(cpu_ticks)
