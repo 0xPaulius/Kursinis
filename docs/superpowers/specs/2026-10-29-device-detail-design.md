@@ -143,7 +143,11 @@ Loki queries (all over the last 24 h, run concurrently):
 
 1. Status: `{job="syslog", host="<h>", program="kursinis-status"}`, limit 120 (about two hours of records). Latest and history both come from this one query.
 2. Activity, syslog family: `{job=~"syslog|linux_endpoint", host="<h>", program!="kursinis-status"} |~ "<prefilter>"`, limit 500 (prefilter in 4.7).
-3. Activity, Windows: `{job="windows", host="<h>"} | json event_id | event_id=~"4624|4625|4720|4726|4732|4740|1102|4104|1"`, limit 500.
+3. Commands, syslog family: the same selector `|= "type=EXECVE"`, limit 200.
+4. Activity, Windows: `{job="windows", host="<h>"} | json event_id | event_id=~"4624|4625|4720|4726|4732|4740|1102|4104"`, limit 500.
+5. Processes, Windows: `{job="windows", host="<h>", channel=~".*Sysmon.*"} | json event_id | event_id="1"`, limit 200.
+
+Process starts (auditd EXECVE, Sysmon 1) are frequent, so they get their own queries and at most 25 of the 50 feed rows; otherwise they would push rare events (account changes, log clears) out of the 500-line limits and the feed. A row returned by two queries is counted once.
 
 The "All logs" tab reuses `GET /api/traffic/logs?host=<hostname>&limit=100`.
 
@@ -174,8 +178,8 @@ Syslog-family lines are split into program and message with the collector's temp
 
 | Program | Message pattern | Kind | User / text |
 |---|---|---|---|
-| sshd | `Accepted <method> for <user> from <ip>` | login | user; "SSH login from <ip> (<method>)" |
-| sshd | `Failed <method> for [invalid user ]<user> from <ip>` | auth_failed | user; "SSH login failed from <ip>" |
+| sshd, sshd-session, sshd-auth (OpenSSH ≥ 9.8) | `Accepted <method> for <user> from <ip>` | login | user; "SSH login from <ip> (<method>)" |
+| sshd, sshd-session, sshd-auth | `Failed <method> for [invalid user ]<user> from <ip>` | auth_failed | user; "SSH login failed from <ip>" |
 | systemd-logind | `New session <id> of user <user>` | login | user; "Session <id> started" |
 | sudo | `<user> : <n> incorrect password attempt(s)` | auth_failed | user; "sudo: <n> incorrect password attempts" |
 | sudo | `<user> : … COMMAND=<cmd>` | admin | user; "sudo <cmd>" |
@@ -183,7 +187,8 @@ Syslog-family lines are split into program and message with the collector's temp
 | any except sshd | `authentication failure; … user=<user>` | auth_failed | user; "<program>: authentication failure" |
 | useradd | `new user: name=<user>` | account | user; "User <user> created" |
 | useradd, groupadd | `new group: name=<group>` | account | "Group <group> created" |
-| usermod, gpasswd | `add '<user>' to group '<group>'` | account | user; "<user> added to group <group>" |
+| useradd (`-G`), usermod, gpasswd | `add '<user>' to group '<group>'` | account | user; "<user> added to group <group>" |
+| gpasswd | `user <user> added by <admin> to group <group>` | account | user; "<user> added to group <group> by <admin>" |
 | userdel | `delete user '<user>'` | account | user; "User <user> deleted" |
 | passwd, chpasswd | `password changed for <user>` | account | user; "Password changed for <user>" |
 | kernel | `Linux version <ver>` | boot | "System booted (Linux <ver>)" |
@@ -214,9 +219,11 @@ Windows events (Alloy JSON; fields from `event_data` `<Data Name="…">`, and `u
 | 4104 | `level` 3 or `levelText` "Warning" (Windows flagged the script as suspicious) | script | "Suspicious PowerShell: <first 120 characters>" |
 | 1 | channel contains "Sysmon" | command | `User`; "<image file name>: <CommandLine>" |
 
-Left out on purpose: cron `CMD` (floods the demo web server's feed), sshd `Invalid user` (the "Failed" line follows), pam failures from sshd (duplicate the sshd line), auditd `USER_AUTH` and `ADD_USER` (duplicate the pam and useradd lines), Windows logon types 3 and 5 (network and service noise).
+Left out on purpose: cron `CMD` (floods the demo web server's feed), sshd `Invalid user` (the "Failed" line follows), pam failures from sshd/sshd-session/sshd-auth and sudo (duplicate their own lines), auditd `USER_AUTH` and `ADD_USER` (duplicate the pam and useradd lines), Windows logon types 3 and 5 (network and service noise).
 
-Prefilter for the syslog query (RE2), one alternation of: `Accepted `, `Failed \S+ for `, `New session `, `COMMAND=`, `incorrect password attempt`, `session opened for user root`, `authentication failure`, `new user: `, `new group: `, `to group '`, `delete user '`, `password changed for `, `Linux version `, `type=EXECVE`, `USER_PROCESS: `, `successfully logged on`, `logged in from `, `The operating system started`, `Installation Successful`.
+Prefilter for the syslog query (RE2), one alternation of: `Accepted `, `Failed \S+ for `, `New session `, `COMMAND=`, `session opened for user root`, `authentication failure`, `new user: `, `new group: `, `to group `, `delete user '`, `password changed for `, `Linux version `, `USER_PROCESS: `, `successfully logged on`, `logged in from `, `The operating system started`, `Installation Successful` (`type=EXECVE` has its own query).
+
+Size limits: syslog lines over 4 KB and Windows lines over 128 KB are skipped (Windows JSON often exceeds 4 KB: script blocks, encoded command lines). EventData values are read up to the next `<` (XML text never contains a raw `<`), which keeps that regex linear too.
 
 ### 4.8 Alerts for a device
 
@@ -239,7 +246,7 @@ The matching in `device_monitor.alert_summary` (alert `source_ip` equals the dev
 
 **Refresh.** Each `devices` SSE event (about every 15 s) re-renders the header and the info panel from the map data. The same event triggers `maybeRefreshDeviceDetail()`, which re-fetches details at most once per 12 s (like `maybeRefreshHistory()`), and the raw logs when that tab is open. Returning to the browser tab also refreshes.
 
-**Edge cases.** The page finds its device in `state.devices`: key `self` is the node with `source === "self"`, any other key the node with that hostname. Until the device map has loaded, the page shows skeletons. A key not in the map (a stale link, a deleted device) shows "Device not found" with a Back button. Typing in the global search on the detail page returns to the filtered list.
+**Edge cases.** The page finds its device in `state.devices`: key `self` is the node with `source === "self"`, any other key a non-self node with that hostname. The map only lists hosts that logged in the last hour, so a device missing from it is built from the key when its details (24 h) have data. Until the map and the details have loaded, the page shows skeletons; "Device not found" (with a Back button) appears only when both arrived and there is nothing for the key (a stale link, a deleted device). A response that arrives after you left the page draws nothing. A stale status keeps the last reported uptime instead of extrapolating it. Typing in the global search on the detail page returns to the filtered list.
 
 ## 5. Error handling
 

@@ -23,21 +23,29 @@ from app.services.loki_client import ns_to_datetime
 
 TEXT_LIMIT = 200
 USER_LIMIT = 64
-MAX_LINE_LENGTH = 4096   # ilgesnės eilutės — ne veiksmai (ir regex darbo riba)
+MAX_LINE_LENGTH = 4096              # syslog: ilgesnės eilutės — ne veiksmai (ir regex darbo riba)
+MAX_WINDOWS_LINE_LENGTH = 131_072   # Windows JSON (scenarijų blokai, užkoduotos komandos); JSON ir regex tiesiniai
 
-# Loki užklausų filtrai (device_details.py): syslog — RE2 eilučių filtras, Windows — įvykių ID.
+# Loki užklausų filtrai (device_details.py). Procesų paleidimai (auditd EXECVE, Sysmon 1) — atskiros
+# užklausos, kad dažni įvykiai neišstumtų retų (paskyros, žurnalo išvalymas) iš eilučių ribos.
 SYSLOG_PREFILTER = "|".join((  # noqa: FLY002 — po vieną alternatyvą, kad būtų skaitoma
     "Accepted ", r"Failed \S+ for ", "New session ", "COMMAND=", "session opened for user root",
-    "authentication failure", "new user: ", "new group: ", "to group '", "delete user '",
-    "password changed for ", "Linux version ", "type=EXECVE", "USER_PROCESS: ", "successfully logged on",
+    "authentication failure", "new user: ", "new group: ", "to group ", "delete user '",
+    "password changed for ", "Linux version ", "USER_PROCESS: ", "successfully logged on",
     "logged in from ", "The operating system started", "Installation Successful",
 ))
-WINDOWS_EVENT_IDS = "4624|4625|4720|4726|4732|4740|1102|4104|1"
+EXECVE_FILTER = "type=EXECVE"
+WINDOWS_EVENT_IDS = "4624|4625|4720|4726|4732|4740|1102|4104"
+SYSMON_PROCESS_EVENT_ID = "1"
+
+# OpenSSH ≥ 9.8 žurnale — „sshd-session" / „sshd-auth", ne „sshd".
+_SSHD = {"sshd", "sshd-session", "sshd-auth"}
 
 # syslog-ng šablonas: <laikas> <host> <facility>.<level> <program>[<pid>]: <žinutė>
 _SYSLOG_RE = re.compile(r"^\S+\s+\S+\s+\w+\.\w+\s+(?P<program>[^\[]+)\[\d*\]:\s(?P<message>.*)$", re.DOTALL)
 _EXECVE_ARG_RE = re.compile(r'\ba\d+=("[^"]*"|[0-9A-Fa-f]+)')
-_DATA_RE = re.compile(r'<Data Name="([^"]+)">(.*?)</Data>', re.DOTALL)
+# XML tekste „<" visada užkoduotas (&lt;), tad reikšmė baigiasi ties pirmu „<" — tiesinis reiškinys.
+_DATA_RE = re.compile(r'<Data Name="([^"]+)">([^<]*)</Data>')
 _USERDATA_RE = re.compile(r"<(\w+)>([^<]*)</\1>")
 _LOGON_TYPES = {"2": "interactive", "7": "unlock", "10": "remote", "11": "cached"}
 
@@ -80,9 +88,9 @@ def _logind(m: re.Match[str], _program: str) -> tuple[str, str] | None:
 
 # Programų vardai mažosiomis (lyginama be raidžių dydžio).
 _SYSLOG_RULES: tuple[_Rule, ...] = (
-    _rule({"sshd"}, r"^Accepted (\S+) for (\S+) from (\S+)", "login",
+    _rule(_SSHD, r"^Accepted (\S+) for (\S+) from (\S+)", "login",
           lambda m, p: (m[2], f"SSH login from {m[3]} ({m[1]})")),
-    _rule({"sshd"}, r"^Failed \S+ for (?:invalid user )?(\S+) from (\S+)", "auth_failed",
+    _rule(_SSHD, r"^Failed \S+ for (?:invalid user )?(\S+) from (\S+)", "auth_failed",
           lambda m, p: (m[1], f"SSH login failed from {m[2]}")),
     _rule({"systemd-logind"},
           r"^New session '?(?P<id>[^' ]+?)'? of user '?(?P<user>[^' ]+?)'?(?: with class '(?P<cls>[^']+)'|\.?$)",
@@ -98,13 +106,16 @@ _SYSLOG_RULES: tuple[_Rule, ...] = (
     # sshd ir sudo nesėkmes aprašo savo eilutės — pam dublikatų nerodome.
     # „user=" ieškoma tik iki kito „;" (kitaip kiekvienas pakartojimas skenuotų iki galo).
     _rule(None, r"authentication failure;[^;]*\buser=(\S+)", "auth_failed",
-          lambda m, p: (m[1], f"{p}: authentication failure"), exclude={"sshd", "sudo"}),
+          lambda m, p: (m[1], f"{p}: authentication failure"), exclude=_SSHD | {"sudo"}),
     _rule({"useradd"}, r"^new user: name=([^,\s]+)", "account",
           lambda m, p: (m[1], f"User {m[1]} created")),
     _rule({"useradd", "groupadd"}, r"^new group: name=([^,\s]+)", "account",
           lambda m, p: ("", f"Group {m[1]} created")),
-    _rule({"usermod", "gpasswd"}, r"add '([^']+)' to group '([^']+)'", "account",
+    # Narystė grupėje (wheel, sudo ...) — svarbiausias teisių išplėtimo ženklas.
+    _rule({"useradd", "usermod", "gpasswd"}, r"add '([^']+)' to group '([^']+)'", "account",
           lambda m, p: (m[1], f"{m[1]} added to group {m[2]}")),
+    _rule({"gpasswd"}, r"^user (\S+) added by (\S+) to group (\S+)", "account",
+          lambda m, p: (m[1], f"{m[1]} added to group {m[3]} by {m[2]}")),
     _rule({"userdel"}, r"^delete user '([^']+)'", "account",
           lambda m, p: (m[1], f"User {m[1]} deleted")),
     _rule({"passwd", "chpasswd"}, r"password changed for (\S+)", "account",
@@ -197,15 +208,19 @@ def classify(entry: dict) -> ActivityItem | None:
     """Loki įrašas ({timestamp, line, labels}) -> ActivityItem; None, jei tai ne veiksmas."""
     when = ns_to_datetime(entry.get("timestamp"))
     line = entry.get("line") or ""
-    if when is None or not line or len(line) > MAX_LINE_LENGTH:
+    if when is None or not line:
         return None
     if (entry.get("labels") or {}).get("job") == "windows":
+        if len(line) > MAX_WINDOWS_LINE_LENGTH:
+            return None
         try:
             obj = json.loads(line)
         except (ValueError, RecursionError):
             return None
         hit = _classify_windows(obj) if isinstance(obj, dict) else None
     else:
+        if len(line) > MAX_LINE_LENGTH:
+            return None
         hit = _classify_syslog(line)
     if hit is None:
         return None
