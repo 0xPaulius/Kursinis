@@ -13,7 +13,10 @@ class FakeLokiClient:
         self._lines = lines
 
     def query_range(self, query: str, start=None, end=None, limit: int = 5000) -> list[dict]:
-        return self._lines
+        return self._lines[:limit]
+
+    def count(self, query: str, at=None) -> float:
+        return float(len(self._lines))
 
 
 def _entry(line: str, host: str = "srv-1") -> dict:
@@ -92,6 +95,30 @@ def test_invalid_user_scan_ignores_repeated_single_username():
     assert alerts == []
 
 
+def test_invalid_user_scan_matches_failed_password_form():
+    """Regression: OpenSSH „Failed password for invalid user X" (mažoji raidė) anksčiau nebuvo matoma."""
+    lines = [
+        _entry(f"Failed password for invalid user {u} from 10.0.0.7 port 4{i}000 ssh2")
+        for i, u in enumerate(["admin", "oracle", "pi"])
+    ]
+    alerts = RuleBasedDetector(FakeLokiClient(lines)).check_unauthorized_access()
+    assert len(alerts) == 1
+    assert alerts[0].details["usernames_tried"] == ["admin", "oracle", "pi"]
+
+
+def test_invalid_user_query_is_case_insensitive():
+    class Recording(FakeLokiClient):
+        queries: list[str] = []
+
+        def query_range(self, query, start=None, end=None, limit=5000):
+            self.queries.append(query)
+            return super().query_range(query, start, end, limit)
+
+    loki = Recording([])
+    RuleBasedDetector(loki).check_unauthorized_access()
+    assert loki.queries == ['{job="syslog"} |~ "(?i)invalid user"']
+
+
 def test_invalid_user_scan_per_ip():
     lines = [
         _entry("Invalid user root from 10.0.0.5 port 22"),
@@ -120,3 +147,11 @@ def test_firewall_spike_no_alert_below_threshold():
     lines = [_entry("DROP packet") for _ in range(50)]
     alerts = RuleBasedDetector(FakeLokiClient(lines)).check_firewall_events()
     assert alerts == []
+
+
+def test_firewall_count_not_capped_by_line_limit():
+    """Kiekis ateina iš metrikos užklausos — ne iš (ribojamo) eilučių sąrašo."""
+    lines = [_entry("DROP packet") for _ in range(7000)]
+    alert = RuleBasedDetector(FakeLokiClient(lines)).check_firewall_events()[0]
+    assert alert.details["blocked_count"] == 7000
+    assert len(alert.sample_lines) <= 15

@@ -21,8 +21,9 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 
-from app.routers import traffic, alerts, health, auth, devices, stream, notifications
+from app.routers import traffic, alerts, health, auth, devices, stream, notifications, attack
 from app.services.alert_reader import AlertReader
+from app.services.device_details import DeviceDetailsService
 from app.services.device_monitor import DeviceMonitor
 from app.services.device_registry import DeviceRegistry
 from app.services.host_info import HostInfo
@@ -43,6 +44,9 @@ STATIC_DIR = Path(__file__).parent / "static"
 
 # Fonis normalaus srauto generavimo intervalas (sekundėmis)
 NORMAL_TRAFFIC_INTERVAL = int(os.getenv("NORMAL_TRAFFIC_INTERVAL", "5"))
+# Sintetinis demonstracinis srautas. Laboratorijos eksperimentų metu išjungiamas
+# (SYNTHETIC_TRAFFIC=false), kad emiterio šablonai neiškreiptų baseline'ų ir FPR.
+SYNTHETIC_TRAFFIC = os.getenv("SYNTHETIC_TRAFFIC", "true").strip().lower() not in {"0", "false", "no"}
 
 # Pranešimų (webhook) tikrinimo intervalas (sekundėmis)
 NOTIFY_INTERVAL = int(os.getenv("NOTIFY_INTERVAL", "10"))
@@ -93,10 +97,18 @@ async def lifespan(app: FastAPI):
             alert_reader=app.state.alert_reader,
             host_info=app.state.host_info,
         )
+        app.state.device_details = DeviceDetailsService(
+            loki=loki,
+            registry=app.state.device_registry,
+            alert_reader=app.state.alert_reader,
+            host_info=app.state.host_info,
+        )
         app.state.notifier = Notifier(client)
         traffic_task = asyncio.create_task(
             _normal_traffic_loop(app.state.device_registry, app.state.syslog_emitter)
-        )
+        ) if SYNTHETIC_TRAFFIC else None
+        if not SYNTHETIC_TRAFFIC:
+            logger.info("Sintetinis srautas išjungtas (SYNTHETIC_TRAFFIC=false)")
         notifier_task = asyncio.create_task(
             _notifier_loop(app.state.notifier, app.state.alert_reader)
         )
@@ -104,10 +116,11 @@ async def lifespan(app: FastAPI):
         try:
             yield
         finally:
-            traffic_task.cancel()
             notifier_task.cancel()
-            with contextlib.suppress(asyncio.CancelledError):
-                await traffic_task
+            if traffic_task is not None:
+                traffic_task.cancel()
+                with contextlib.suppress(asyncio.CancelledError):
+                    await traffic_task
             with contextlib.suppress(asyncio.CancelledError):
                 await notifier_task
             app.state.syslog_emitter.close()
@@ -135,6 +148,18 @@ app.add_middleware(
     allow_headers=["Authorization", "Content-Type"],
 )
 
+
+# Frontend'as — keli ES moduliai be versijų žymų: be šios antraštės naršyklė gali
+# po atnaujinimo sujungti senus ir naujus modulius. no-cache = kas kartą tikrinti ETag.
+@app.middleware("http")
+async def revalidate_frontend(request, call_next):
+    response = await call_next(request)
+    path = request.url.path
+    if path in ("/", "/login") or path.startswith("/static/"):
+        response.headers["Cache-Control"] = "no-cache"
+    return response
+
+
 # API maršrutai
 app.include_router(auth.router)
 app.include_router(traffic.router)
@@ -143,6 +168,7 @@ app.include_router(health.router)
 app.include_router(devices.router)
 app.include_router(stream.router)
 app.include_router(notifications.router)
+app.include_router(attack.router)
 
 # Statiniai failai
 app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")

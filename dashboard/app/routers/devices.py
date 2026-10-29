@@ -13,40 +13,34 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.dependencies import (
     get_alert_reader,
+    get_device_details,
     get_device_monitor,
     get_device_registry,
     get_syslog_emitter,
+    require_admin,
     require_auth,
 )
 from app.models.schemas import (
     DemoScenarioRequest,
     Device,
     DeviceCreate,
+    DeviceDetails,
     DeviceList,
     DeviceMap,
     SimulateResponse,
 )
 from app.services.alert_reader import AlertReader
-from app.services.device_monitor import DeviceMonitor
+from app.services.device_details import DeviceDetailsService, DeviceNotFound
+from app.services.device_monitor import DeviceMonitor, alert_summary
 from app.services.device_registry import DeviceRegistry
 from app.services.syslog_emitter import SyslogEmitter
 
 router = APIRouter(prefix="/api/devices", tags=["devices"], dependencies=[Depends(require_auth)])
 
-_SEV_RANK = {"low": 1, "medium": 2, "high": 3, "critical": 4}
-
 
 def _annotate(device: dict, reader: AlertReader) -> Device:
     """Priskiria įrenginiui įspėjimų skaičių ir blogiausią sunkumą iš alertų istorijos."""
-    ip = device.get("ip", "")
-    hostname = device.get("hostname", "")
-    count = 0
-    worst = "none"
-    for alert in reader.read_all():
-        if (ip and alert.source_ip == ip) or (hostname and hostname in (alert.source_host or "")):
-            count += 1
-            if _SEV_RANK.get(alert.severity, 0) > _SEV_RANK.get(worst, 0):
-                worst = alert.severity
+    count, worst = alert_summary(device.get("ip", ""), device.get("hostname", ""), reader.read_all())
     return Device(**device, alert_count=count, worst_severity=worst)
 
 
@@ -68,7 +62,19 @@ async def device_map(
     return DeviceMap(**await monitor.build_map())
 
 
-@router.post("", response_model=Device, status_code=201)
+@router.get("/{key}/details", response_model=DeviceDetails)
+async def device_details(
+    key: str,
+    service: Annotated[DeviceDetailsService, Depends(get_device_details)],
+) -> DeviceDetails:
+    """Vieno įrenginio detalės: būsena (CPU, atmintis, programos), paskutiniai veiksmai, įspėjimai."""
+    try:
+        return await service.details(key)
+    except DeviceNotFound:
+        raise HTTPException(status_code=404, detail="Įrenginys nerastas")
+
+
+@router.post("", response_model=Device, status_code=201, dependencies=[Depends(require_admin)])
 async def create_device(
     payload: DeviceCreate,
     registry: Annotated[DeviceRegistry, Depends(get_device_registry)],
@@ -78,13 +84,14 @@ async def create_device(
     try:
         device = registry.add(
             name=payload.name, ip=payload.ip, os_type=payload.os, os_version=payload.os_version,
+            synthetic=payload.synthetic,
         )
     except ValueError as exc:
         raise HTTPException(status_code=400, detail=str(exc))
     return _annotate(device, reader)
 
 
-@router.delete("/{device_id}")
+@router.delete("/{device_id}", dependencies=[Depends(require_admin)])
 async def delete_device(
     device_id: str,
     registry: Annotated[DeviceRegistry, Depends(get_device_registry)],
@@ -109,7 +116,7 @@ def _resolve_demo_targets(registry: DeviceRegistry) -> tuple[dict | None, dict |
     return web, router
 
 
-@router.post("/demo/scenario", response_model=SimulateResponse)
+@router.post("/demo/scenario", response_model=SimulateResponse, dependencies=[Depends(require_admin)])
 async def run_demo_scenario(
     payload: DemoScenarioRequest,
     registry: Annotated[DeviceRegistry, Depends(get_device_registry)],

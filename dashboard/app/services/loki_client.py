@@ -19,6 +19,16 @@ def _to_ns(dt: datetime.datetime) -> int:
     return int(dt.timestamp() * _NS)
 
 
+def ns_to_datetime(ts: str | int | None) -> datetime.datetime | None:
+    """Loki įrašo laikas (nanosekundės) -> UTC datetime; None, jei reikšmė netinkama."""
+    if ts is None:
+        return None
+    try:
+        return datetime.datetime.fromtimestamp(int(ts) / _NS, tz=datetime.timezone.utc)
+    except (TypeError, ValueError, OverflowError, OSError):
+        return None
+
+
 class AsyncLokiClient:
     """Async Loki HTTP klientas su graceful degradation."""
 
@@ -112,6 +122,31 @@ class AsyncLokiClient:
 
         except Exception as exc:
             logger.warning("Loki query_metric klaida (%s): %s", query[:60], exc)
+            return []
+
+    async def query_instant(
+        self,
+        query: str,
+        at: datetime.datetime | None = None,
+    ) -> list[dict]:
+        """
+        Vykdo LogQL metric query vienam laiko momentui (be query_range žingsnio lygiavimo).
+        Grąžina vector rezultatą: [{metric: {}, value: [ts, val]}]
+        """
+        if at is None:
+            at = datetime.datetime.now(datetime.timezone.utc)
+
+        try:
+            resp = await self._client.get(
+                f"{self.base_url}/loki/api/v1/query",
+                params={"query": query, "time": _to_ns(at)},
+                timeout=20.0,
+            )
+            resp.raise_for_status()
+            return resp.json().get("data", {}).get("result", [])
+
+        except Exception as exc:
+            logger.warning("Loki query_instant klaida (%s): %s", query[:60], exc)
             return []
 
     async def is_ready(self) -> bool:

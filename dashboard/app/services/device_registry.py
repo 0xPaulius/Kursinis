@@ -39,7 +39,7 @@ DEFAULT_OS_VERSION = {
 # Numatytieji demonstraciniai įrenginiai — kad sistema iškart turėtų realistišką
 # srautą (žemėlapis + „Paleisti demonstraciją" mygtukas). Dashboard fonis ciklas
 # (main.py) generuoja jiems normalų srautą, tad jie matomi kaip aktyvūs. Pridedami
-# tik jei jų dar nėra (neperrašo vartotojo pridėtų įrenginių).
+# tik jei jų dar nėra (neperrašo vartotojo pridėtų įrenginių) ir vartotojas jų neištrynė.
 DEFAULT_DEVICES = [
     {"id": "default-macbook", "name": "MacBook", "hostname": "macbook",
      "ip": "192.168.1.50", "os": "macos"},
@@ -83,12 +83,12 @@ class DeviceRegistry:
     # -- Numatytieji įrenginiai ----------------------------------------------
 
     def _ensure_defaults(self) -> None:
-        """Prideda numatytuosius įrenginius, jei jų dar nėra (pagal hostname)."""
+        """Prideda numatytuosius įrenginius, jei jų dar nėra ir vartotojas jų neištrynė."""
         existing = {d.get("hostname") for d in self._devices}
         changed = False
         now = datetime.datetime.now(datetime.timezone.utc).isoformat()
         for d in DEFAULT_DEVICES:
-            if d["hostname"] in existing:
+            if d["hostname"] in existing or d["hostname"] in self._suppressed:
                 continue
             self._devices.append({
                 "id": d["id"],
@@ -101,11 +101,9 @@ class DeviceRegistry:
                 "enabled": True,
                 "created_at": now,
             })
-            self._suppressed.discard(d["hostname"])
             changed = True
         if changed:
             self._save()
-            self._save_suppressed()
             logger.info("Numatytieji demonstraciniai įrenginiai užtikrinti")
 
     # -- Persistencija --------------------------------------------------------
@@ -185,8 +183,13 @@ class DeviceRegistry:
     def get(self, device_id: str) -> dict | None:
         return next((d for d in self._devices if d["id"] == device_id), None)
 
-    def add(self, name: str, ip: str, os_type: str, os_version: str | None = None) -> dict:
-        """Sukuria ir išsaugo naują įrenginį. Kelia ValueError, jei duomenys netinkami."""
+    def add(self, name: str, ip: str, os_type: str, os_version: str | None = None,
+            synthetic: bool = True) -> dict:
+        """
+        Sukuria ir išsaugo naują įrenginį. Kelia ValueError, jei duomenys netinkami.
+        synthetic=True — demonstracinis įrenginys (automatiškai generuoja normalų srautą);
+        synthetic=False — realus įrenginys (siunčia savo tikrus logus, srautas negeneruojamas).
+        """
         name = (name or "").strip()
         if not name:
             raise ValueError("Pavadinimas privalomas")
@@ -205,7 +208,7 @@ class DeviceRegistry:
             "ip": ip,
             "os": os_type,
             "os_version": os_version,
-            "synthetic": True,
+            "synthetic": synthetic,
             "enabled": True,
             "created_at": datetime.datetime.now(datetime.timezone.utc).isoformat(),
         }

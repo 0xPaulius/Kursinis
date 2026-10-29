@@ -16,6 +16,7 @@ import logging
 import os
 import re
 
+from app.log_selectors import logs_selector
 from app.services.alert_reader import AlertReader
 from app.services.device_registry import DEFAULT_OS_VERSION, DeviceRegistry
 from app.services.host_info import HostInfo
@@ -24,7 +25,6 @@ from app.services.loki_client import AsyncLokiClient
 logger = logging.getLogger(__name__)
 
 _SEV_RANK = {"low": 1, "medium": 2, "high": 3, "critical": 4}
-_NS = 1_000_000_000
 
 # Savo serverio (host) rodomas vardas — be realaus hostname (pvz. „bombiteris").
 SELF_DEVICE_NAME = os.getenv("SELF_DEVICE_NAME", "Šis serveris")
@@ -32,12 +32,25 @@ SELF_DEVICE_NAME = os.getenv("SELF_DEVICE_NAME", "Šis serveris")
 _IP_ONLY = re.compile(r"^\d{1,3}(\.\d{1,3}){3}$")
 
 
-def _ns_to_iso(ts_ns: str) -> str:
-    try:
-        sec = int(ts_ns) / _NS
-        return datetime.datetime.fromtimestamp(sec, tz=datetime.timezone.utc).isoformat()
-    except (ValueError, TypeError):
-        return ""
+def _matches(alert, ip: str, hostname: str) -> bool:
+    # source_host gali būti sąrašas „web-1, web-2" (SSH brute-force keliems host'ams).
+    hosts = {h.strip() for h in (alert.source_host or "").split(",")}
+    return bool((ip and alert.source_ip == ip) or (hostname and hostname in hosts))
+
+
+def alerts_for_device(ip: str, hostname: str, alerts: list) -> list:
+    """Įrenginio įspėjimai (pagal IP arba tikslų host vardą), ta pačia tvarka kaip `alerts`."""
+    return [a for a in alerts if _matches(a, ip, hostname)]
+
+
+def alert_summary(ip: str, hostname: str, alerts: list) -> tuple[int, str]:
+    """Įrenginio įspėjimų skaičius ir blogiausias sunkumas (pagal IP arba tikslų host vardą)."""
+    matched = alerts_for_device(ip, hostname, alerts)
+    worst = "none"
+    for a in matched:
+        if _SEV_RANK.get(a.severity, 0) > _SEV_RANK.get(worst, 0):
+            worst = a.severity
+    return len(matched), worst
 
 
 class DeviceMonitor:
@@ -64,11 +77,11 @@ class DeviceMonitor:
 
         # Kiekiai per metric užklausas (neribojama 5000 eilučių riba)
         m5 = await self._loki.query_metric(
-            'sum by (host)(count_over_time({job="syslog"}[5m]))',
+            f'sum by (host)(count_over_time({logs_selector()}[5m]))',
             start=now - datetime.timedelta(minutes=5), end=now, step="5m",
         )
         m1h = await self._loki.query_metric(
-            'sum by (host)(count_over_time({job="syslog"}[1h]))',
+            f'sum by (host)(count_over_time({logs_selector()}[1h]))',
             start=now - datetime.timedelta(hours=1), end=now, step="1h",
         )
         for series in m5:
@@ -80,32 +93,22 @@ class DeviceMonitor:
             if host:
                 _ensure(host)["logs_1h"] = _last_value(series)
 
-        # Paskutinio logo laikas — iš naujausių eilučių per 1 val
-        recent = await self._loki.query_range(
-            '{job="syslog"}', start=now - datetime.timedelta(hours=1), end=now, limit=5000,
+        # Paskutinio logo laikas — paskutinė netuščia minutė per 1 val (metric query, ±1 min;
+        # eilučių atsisiuntimas apribotas 5000 ir tylesnių host'ų nepasiektų)
+        recent = await self._loki.query_metric(
+            f'sum by (host)(count_over_time({logs_selector()}[1m]))',
+            start=now - datetime.timedelta(hours=1), end=now, step="1m",
         )
-        for entry in recent:
-            host = entry.get("labels", {}).get("host")
-            if not host:
-                continue
-            iso = _ns_to_iso(entry.get("timestamp", ""))
-            cur = _ensure(host)
-            if iso and (cur["last_seen"] is None or iso > cur["last_seen"]):
-                cur["last_seen"] = iso
+        for series in recent:
+            host = series.get("metric", {}).get("host")
+            stamps = [float(ts) for ts, _val in series.get("values", [])]
+            if host and stamps:
+                _ensure(host)["last_seen"] = datetime.datetime.fromtimestamp(
+                    max(stamps), tz=datetime.timezone.utc).isoformat()
 
         return stats
 
     # -- Mazgų sudarymas ------------------------------------------------------
-
-    def _alerts_for(self, ip: str, hostname: str, alerts: list) -> tuple[int, str]:
-        count = 0
-        worst = "none"
-        for a in alerts:
-            if (ip and a.source_ip == ip) or (hostname and hostname in (a.source_host or "")):
-                count += 1
-                if _SEV_RANK.get(a.severity, 0) > _SEV_RANK.get(worst, 0):
-                    worst = a.severity
-        return count, worst
 
     async def build_map(self) -> dict:
         stats = await self._per_host_stats()
@@ -156,7 +159,7 @@ class DeviceMonitor:
             node["logs_1h"] = int(st.get("logs_1h", 0))
             node["last_seen"] = st.get("last_seen")
             node["online"] = node["logs_5m"] > 0
-            ac, ws = self._alerts_for(node.get("ip", ""), node["hostname"], alerts)
+            ac, ws = alert_summary(node.get("ip", ""), node["hostname"], alerts)
             node["alert_count"] = ac
             node["worst_severity"] = ws
             result.append(node)

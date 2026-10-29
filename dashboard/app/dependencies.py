@@ -3,10 +3,11 @@ FastAPI priklausomybės (dependency injection).
 """
 from __future__ import annotations
 
-from fastapi import Header, HTTPException, Request
+from fastapi import Depends, Header, HTTPException, Request
 
-from app.routers.auth import verify_demo_token
+from app.routers.auth import verify_session
 from app.services.alert_reader import AlertReader
+from app.services.device_details import DeviceDetailsService
 from app.services.device_monitor import DeviceMonitor
 from app.services.device_registry import DeviceRegistry
 from app.services.loki_client import AsyncLokiClient
@@ -38,13 +39,17 @@ def get_device_monitor(request: Request) -> DeviceMonitor:
     return request.app.state.device_monitor
 
 
+def get_device_details(request: Request) -> DeviceDetailsService:
+    return request.app.state.device_details
+
+
 def get_notifier(request: Request):
     return request.app.state.notifier
 
 
-def require_auth(authorization: str | None = Header(default=None)) -> None:
+def require_auth(authorization: str | None = Header(default=None)) -> dict:
     """
-    Tikrina `Authorization: Bearer <token>` antraštę.
+    Tikrina `Authorization: Bearer <token>` antraštę ir grąžina tokeno claims.
     Naudojama API maršrutuose, kuriems reikia prisijungimo.
     """
     if not authorization:
@@ -52,5 +57,14 @@ def require_auth(authorization: str | None = Header(default=None)) -> None:
     token = authorization.strip()
     if token.lower().startswith("bearer "):
         token = token[7:].strip()
-    if not verify_demo_token(token):
+    claims = verify_session(token)
+    if claims is None:
         raise HTTPException(status_code=401, detail="Neteisingas arba pasibaigęs tokenas")
+    return claims
+
+
+def require_admin(claims: dict = Depends(require_auth)) -> dict:
+    """Leidžia tik `admin` rolei (įrenginių keitimas, atakos, pranešimai)."""
+    if claims.get("r") != "admin":
+        raise HTTPException(status_code=403, detail="Reikalingos administratoriaus teisės")
+    return claims

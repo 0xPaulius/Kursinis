@@ -1,0 +1,34 @@
+####################################################################
+# Syslog per TLS (RFC 5425 prievadas 6514)
+#
+# Įjungimas:
+#   tools/gen-certs.sh ca
+#   tools/gen-certs.sh server <kolektoriaus IP/DNS>
+#   cp config/syslog-ng/conf.d/tls.conf.example config/syslog-ng/conf.d/tls.conf
+#   docker compose restart syslog-ng
+#
+# Serveris autentifikuojasi sertifikatu, srautas šifruojamas. Kliento
+# sertifikatų nereikalaujama (optional-untrusted) — rsyslog/syslog-ng klientams
+# užtenka CA failo. Tinklo įrenginiai, nepalaikantys TLS (pvz. MikroTik
+# RouterOS), toliau siunčia per UDP/TCP 514.
+#
+# Naudoja d_all / d_security / d_errors ir filtrus iš syslog-ng.conf.
+####################################################################
+
+source s_tls {
+    network(
+        ip("0.0.0.0")
+        port(6514)
+        transport("tls")
+        tls(
+            key-file("/etc/syslog-ng/tls/collector.key")
+            cert-file("/etc/syslog-ng/tls/collector.crt")
+            peer-verify(optional-untrusted)
+        )
+        max-connections(100)
+    );
+};
+
+log { source(s_tls); destination(d_all); };
+log { source(s_tls); filter(f_security); destination(d_security); };
+log { source(s_tls); filter(f_error); destination(d_errors); };

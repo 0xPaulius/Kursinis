@@ -4,321 +4,171 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Logų analizė</title>
-<script src="/static/js/tailwind.min.js"></script>
+<script src="/static/js/theme-boot.js"></script>
+<link rel="stylesheet" href="/static/css/theme.css">
 <link rel="stylesheet" href="/static/fonts/fonts.css">
-<link rel="stylesheet" href="/static/css/style.css">
-<script>
-tailwind.config = {
-  darkMode: "class",
-  theme: {
-    extend: {
-      colors: {
-        // Paviršiai / neutralios spalvos (Material 3 light)
-        "surface":                  "#fbf8ff",
-        "surface-dim":              "#dad9e3",
-        "surface-bright":           "#fbf8ff",
-        "surface-container-lowest": "#ffffff",
-        "surface-container-low":    "#f4f2fd",
-        "surface-container":        "#eeedf7",
-        "surface-container-high":   "#e8e7f1",
-        "surface-container-highest":"#e3e1ec",
-        "on-surface":               "#1a1b22",
-        "on-surface-variant":       "#47464a",
-        "outline":                  "#78767b",
-        "outline-variant":          "#c8c5ca",
-        "background":               "#fbf8ff",
-        "on-background":            "#1a1b22",
-        "inverse-surface":          "#2f3038",
-        "inverse-on-surface":       "#f1effa",
-        // Pirminė (juoda)
-        "primary":                  "#000000",
-        "on-primary":               "#ffffff",
-        "primary-container":        "#1c1b1d",
-        "on-primary-container":     "#858386",
-        "primary-fixed":            "#e5e1e4",
-        "primary-fixed-dim":        "#c8c6c8",
-        // Antrinė (žalia)
-        "secondary":                "#006c4a",
-        "on-secondary":             "#ffffff",
-        "secondary-container":      "#82f5c1",
-        "on-secondary-container":   "#00714e",
-        "secondary-fixed":          "#85f8c4",
-        "secondary-fixed-dim":      "#68dba9",
-        // Tretinė — paliekama gintarinė „medium" pavojaus lygiui
-        "tertiary-fixed":           "#ffddb8",
-        "tertiary-fixed-dim":       "#ffb95f",
-        "on-tertiary-container":    "#b87500",
-        "on-tertiary-fixed":        "#2a1700",
-        // Klaida (raudona)
-        "error":                    "#ba1a1a",
-        "on-error":                 "#ffffff",
-        "error-container":          "#ffdad6",
-        "on-error-container":       "#93000a",
-      },
-      fontFamily: {
-        headline:    ["Manrope","sans-serif"],
-        body:        ["Inter","sans-serif"],
-        label:       ["Inter","sans-serif"],
-        "data-mono": ["JetBrains Mono","ui-monospace","SFMono-Regular","monospace"],
-      },
-      borderRadius: {
-        DEFAULT: "0.25rem",
-        lg: "0.5rem",
-        xl: "0.75rem",
-        "2xl": "1rem",
-        full: "9999px",
-      },
-      spacing: {
-        sidebar_width: "240px",
-        topbar_height: "56px",
-        gutter: "24px",
-        container_padding: "32px",
-        stack_sm: "8px",
-        stack_md: "16px",
-        stack_lg: "24px",
-        base: "8px",
-      },
-      fontSize: {
-        "label-md":    ["12px", {"lineHeight":"16px","letterSpacing":"0.05em","fontWeight":"500"}],
-        "headline-sm": ["18px", {"lineHeight":"28px","letterSpacing":"-0.01em","fontWeight":"600"}],
-        "headline-md": ["24px", {"lineHeight":"32px","letterSpacing":"-0.02em","fontWeight":"600"}],
-        "headline-lg": ["30px", {"lineHeight":"36px","letterSpacing":"-0.02em","fontWeight":"600"}],
-        "body-md":     ["14px", {"lineHeight":"20px"}],
-        "body-lg":     ["16px", {"lineHeight":"24px"}],
-        "body-sm":     ["12px", {"lineHeight":"16px"}],
-        "data-mono":   ["13px", {"lineHeight":"16px"}],
-      },
-    },
-  },
-}
-</script>
-<style>
-  .material-symbols-outlined { font-variation-settings:'FILL' 0,'wght' 400,'GRAD' 0,'opsz' 24; }
-  .ms-fill { font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24; }
-  body { font-family:'Inter',sans-serif; }
-  .page { display:none; }
-  .page.active { display:block; }
-  .nav-btn { display:flex; align-items:center; gap:0.75rem; padding:0.5rem 0.75rem; border-radius:0.5rem; transition:background-color .15s, color .15s; width:100%; cursor:pointer; border:none; background:transparent; text-align:left; color:#47464a; font-weight:500; }
-  .nav-btn:hover { background:#e8e7f1; color:#1a1b22; }
-  .nav-btn.active { background:#82f5c1; color:#00714e; font-weight:700; }
-  .nav-btn.active .nav-icon { font-variation-settings:'FILL' 1,'wght' 400,'GRAD' 0,'opsz' 24; }
-  .skeleton { background:linear-gradient(90deg,#e3e1ec 25%,#f4f2fd 50%,#e3e1ec 75%); background-size:200% 100%; animation:shimmer 1.5s infinite; border-radius:6px; }
-  @keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
-</style>
+<script src="/static/js/tailwind.min.js"></script>
+<script src="/static/js/tailwind.config.js"></script>
 </head>
-<body class="bg-surface text-on-surface antialiased min-h-screen">
+<body>
 
-<!-- SIDEBAR -->
-<aside class="hidden md:flex flex-col h-full w-sidebar_width fixed left-0 top-0 p-stack_md border-r border-outline-variant bg-surface z-50">
-  <!-- Brand -->
-  <div class="flex items-center gap-3 mb-8 px-2">
-    <div class="w-8 h-8 bg-primary rounded-lg flex items-center justify-center shrink-0">
-      <span class="material-symbols-outlined ms-fill text-on-primary text-[20px]">security</span>
-    </div>
-    <div>
-      <h1 id="sidebar-title" class="text-headline-sm font-headline font-bold text-primary leading-none mb-1">Logų analizė</h1>
-      <p class="text-label-md font-label text-on-surface-variant uppercase tracking-wider leading-none">Stebėjimo pultas</p>
-    </div>
+<!-- VIRŠUTINĖ JUOSTA -->
+<header class="app-top">
+  <div class="app-brand">
+    <span class="app-logo"><span class="material-symbols-outlined ms-fill">shield</span></span>
+    <span id="sidebar-title" class="app-brand-name" data-i18n="title">Logų analizė</span>
+    <span class="material-symbols-outlined app-crumb-sep">chevron_right</span>
+    <span id="crumb-page" class="app-crumb">Apžvalga</span>
   </div>
 
-  <!-- Navigation -->
-  <nav class="flex-1 space-y-1">
-    <button class="nav-btn active" id="nav-dashboard" onclick="navigate('dashboard')">
-      <span class="material-symbols-outlined nav-icon text-[20px]">dashboard</span>
-      <span id="nav-label-dashboard" class="text-label-md font-label">Apžvalga</span>
+  <div class="app-search">
+    <span class="material-symbols-outlined">search</span>
+    <input id="search-input" type="text" autocomplete="off"
+      data-i18n-placeholder="search_placeholder" placeholder="Ieškoti įvykių ar įrenginių...">
+    <span id="search-count" class="hidden app-search-count"></span>
+    <button id="search-clear" class="hidden" data-i18n-title="close" title="Uždaryti">
+      <span class="material-symbols-outlined">close</span>
     </button>
-    <button class="nav-btn" id="nav-anomalies" onclick="navigate('anomalies')">
-      <span class="material-symbols-outlined nav-icon text-[20px]">warning</span>
-      <span id="nav-label-anomalies" class="text-label-md font-label">Anomalijos</span>
-    </button>
-    <button class="nav-btn" id="nav-devices" onclick="navigate('devices')">
-      <span class="material-symbols-outlined nav-icon text-[20px]">router</span>
-      <span id="nav-label-devices" class="text-label-md font-label">Įrenginiai</span>
-    </button>
-    <button class="nav-btn" id="nav-messages" onclick="navigate('messages')">
-      <span class="material-symbols-outlined nav-icon text-[20px]">notifications_active</span>
-      <span id="nav-label-messages" class="text-label-md font-label">Pranešimai</span>
-    </button>
-  </nav>
+    <kbd class="app-kbd">Ctrl K</kbd>
+  </div>
 
-  <!-- Footer -->
-  <div class="mt-auto pt-4 border-t border-outline-variant">
-    <button onclick="toggleLang()" id="lang-btn"
-      class="nav-btn">
-      <span class="material-symbols-outlined nav-icon text-[20px]">translate</span>
-      <span>EN</span>
+  <div class="app-actions">
+    <span id="live-status" class="app-live"></span>
+    <span id="health-badge" class="app-health"></span>
+    <button id="lang-btn" class="btn btn-icon">EN</button>
+    <button id="theme-btn" class="btn btn-icon"><span class="material-symbols-outlined">light_mode</span></button>
+    <span id="user-name" class="app-user"></span>
+    <button id="logout-btn" class="btn btn-icon" title="Atsijungti">
+      <span class="material-symbols-outlined">logout</span>
     </button>
   </div>
-</aside>
+</header>
 
-<!-- TOP BAR -->
-<nav class="h-topbar_height fixed top-0 z-40 w-full md:ml-sidebar_width md:w-[calc(100%-240px)] border-b border-outline-variant bg-surface flex items-center justify-between px-gutter gap-4">
-  <!-- Search -->
-  <div class="flex items-center gap-2 h-9 w-72 max-w-[40vw] border border-outline-variant rounded-lg focus-within:border-primary transition-colors px-3 bg-surface-container-lowest">
-    <span class="material-symbols-outlined text-on-surface-variant text-[20px]">search</span>
-    <input id="search-input" type="text"
-      class="w-full bg-transparent border-none p-0 focus:ring-0 text-body-md font-body text-on-surface placeholder:text-on-surface-variant outline-none"
-      placeholder="Ieškoti įvykių ar įrenginių...">
-    <button id="search-clear" class="hidden text-on-surface-variant hover:text-on-surface transition" title="Išvalyti">
-      <span class="material-symbols-outlined text-[18px]">close</span>
-    </button>
-  </div>
-  <div id="search-count" class="hidden text-label-md font-label text-on-surface-variant mr-auto ml-2"></div>
-
-  <!-- Trailing actions -->
-  <div class="flex items-center gap-stack_md ml-auto">
-    <div id="health-badge" class="flex items-center gap-2 px-3 py-1.5 bg-surface-container rounded-full">
-      <div class="w-2 h-2 rounded-full bg-outline"></div>
-      <span class="text-label-md font-label font-bold tracking-wide uppercase text-on-surface-variant">Tikrinama...</span>
-    </div>
-    <div class="h-6 w-px bg-outline-variant"></div>
-    <div class="w-8 h-8 rounded-full bg-surface-container-high border border-outline-variant flex items-center justify-center shrink-0">
-      <span class="material-symbols-outlined text-on-surface-variant text-[20px]">person</span>
-    </div>
-    <button id="logout-btn" onclick="logout()"
-      class="flex items-center gap-1 px-3 py-1.5 rounded-lg text-label-md font-label font-bold uppercase text-on-surface-variant hover:bg-surface-container-high transition"
-      title="Atsijungti">
-      <span class="material-symbols-outlined text-[18px]">logout</span>
-    </button>
-  </div>
+<!-- KAIRYSIS MENIU -->
+<nav class="app-menu">
+  <button class="nav-item active" id="nav-dashboard" data-nav="dashboard" data-i18n-title="nav_dashboard">
+    <span class="material-symbols-outlined">dashboard</span>
+    <span id="nav-label-dashboard" data-i18n="nav_dashboard">Apžvalga</span>
+  </button>
+  <button class="nav-item" id="nav-anomalies" data-nav="anomalies" data-i18n-title="nav_anomalies">
+    <span class="material-symbols-outlined">warning</span>
+    <span id="nav-label-anomalies" data-i18n="nav_anomalies">Anomalijos</span>
+    <span id="nav-anomalies-count" class="nav-count hidden"></span>
+  </button>
+  <button class="nav-item" id="nav-devices" data-nav="devices" data-i18n-title="nav_devices">
+    <span class="material-symbols-outlined">router</span>
+    <span id="nav-label-devices" data-i18n="nav_devices">Įrenginiai</span>
+  </button>
+  <button class="nav-item" id="nav-attack" data-nav="attack" data-i18n-title="nav_attack">
+    <span class="material-symbols-outlined">security</span>
+    <span id="nav-label-attack" data-i18n="nav_attack">ATT&amp;CK aprėptis</span>
+  </button>
+  <button class="nav-item" id="nav-messages" data-nav="messages" data-i18n-title="nav_messages">
+    <span class="material-symbols-outlined">notifications</span>
+    <span id="nav-label-messages" data-i18n="nav_messages">Pranešimai</span>
+  </button>
 </nav>
 
-<!-- MAIN -->
-<main class="md:ml-sidebar_width pt-topbar_height min-h-screen bg-surface">
-<div class="max-w-[1440px] mx-auto p-container_padding space-y-stack_lg">
+<!-- TURINYS -->
+<main class="app-main">
+<div id="app-banner" class="banner hidden"></div>
+<div class="app-content">
 
   <!-- ======================== APŽVALGA ======================== -->
-  <section id="page-dashboard" class="page active space-y-stack_lg">
+  <section id="page-dashboard" class="page active">
 
-    <!-- Page header -->
-    <header class="flex justify-between items-end gap-4 flex-wrap">
-      <div>
-        <h2 id="overview-title" class="text-headline-lg font-headline text-primary mb-1">Apžvalga</h2>
-        <p id="overview-subtitle" class="text-body-md font-body text-on-surface-variant">Sistemos našumas ir aktyvaus stebėjimo rodikliai.</p>
-      </div>
-      <div class="relative">
-        <button id="range-btn" onclick="toggleRangeMenu(event)"
-          class="px-4 py-2 bg-surface-container-lowest border border-outline-variant text-on-surface text-label-md font-label rounded-lg flex items-center gap-2 hover:border-outline transition">
-          <span class="material-symbols-outlined text-[18px]">schedule</span>
+    <div class="ctl-row">
+      <label class="ctl-var">
+        <span data-i18n="col_device">Įrenginys</span>
+        <select id="traffic-device-select"><option value="">Visi įrenginiai</option></select>
+      </label>
+      <div class="relative ml-auto">
+        <button id="range-btn" class="btn">
+          <span class="material-symbols-outlined">schedule</span>
           <span id="range-label">Paskutinės 24 valandos</span>
-          <span class="material-symbols-outlined text-[18px]">expand_more</span>
+          <span class="material-symbols-outlined">expand_more</span>
         </button>
-        <div id="range-menu" class="hidden absolute right-0 mt-1 w-56 bg-surface-container-lowest border border-outline-variant rounded-lg shadow-lg z-50 py-1"></div>
+        <div id="range-menu" class="hidden menu-pop"></div>
       </div>
-    </header>
+      <button id="refresh-btn" class="btn btn-icon" data-i18n-title="logs_refresh" title="Atnaujinti">
+        <span class="material-symbols-outlined">refresh</span>
+      </button>
+    </div>
 
-    <!-- Metrics grid -->
-    <section class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-4 gap-stack_md">
-      <!-- Logs -->
-      <div class="bg-surface-container-lowest border border-outline-variant p-stack_md rounded-lg flex flex-col gap-stack_sm hover:border-outline transition-colors">
-        <div class="flex justify-between items-start">
-          <span id="metric-logs-label" class="text-label-md font-label text-on-surface-variant uppercase tracking-wider">Logs (5 min)</span>
-          <span class="material-symbols-outlined text-on-surface-variant text-[20px]">article</span>
-        </div>
-        <div id="metric-logs-value" class="text-headline-lg font-data-mono text-primary">—</div>
-        <div class="mt-auto">
-          <span id="metric-logs-badge" class="px-2.5 py-0.5 rounded-full text-[10px] font-bold font-label bg-secondary-container text-on-secondary-container">Normalus</span>
-        </div>
+    <div class="grid grid-cols-12 gap-2">
+      <div class="panel stat col-span-12 sm:col-span-6 xl:col-span-3">
+        <div class="panel-h"><span id="metric-logs-label" data-i18n="metric_logs">Logs (5 min)</span></div>
+        <div id="metric-logs-value" class="stat-v">—</div>
+        <svg id="metric-logs-spark" class="stat-spark" viewBox="0 0 300 44" preserveAspectRatio="none"></svg>
       </div>
-      <!-- Klaidos -->
-      <div class="bg-surface-container-lowest border border-outline-variant p-stack_md rounded-lg flex flex-col gap-stack_sm hover:border-outline transition-colors">
-        <div class="flex justify-between items-start">
-          <span id="metric-errors-label" class="text-label-md font-label text-on-surface-variant uppercase tracking-wider">Klaidos (5 min)</span>
-          <span class="material-symbols-outlined text-on-surface-variant text-[20px]">error</span>
-        </div>
-        <div id="metric-errors-value" class="text-headline-lg font-data-mono text-primary">—</div>
-        <div class="mt-auto">
-          <span id="metric-errors-badge" class="px-2.5 py-0.5 rounded-full text-[10px] font-bold font-label bg-secondary-container text-on-secondary-container">Gerai</span>
-        </div>
+      <div class="panel stat col-span-12 sm:col-span-6 xl:col-span-3">
+        <div class="panel-h"><span id="metric-errors-label" data-i18n="metric_errors">Klaidos (5 min)</span></div>
+        <div class="stat-v"><span id="metric-errors-value">—</span><small id="metric-errors-pct"></small></div>
       </div>
-      <!-- Sparta -->
-      <div class="bg-surface-container-lowest border border-outline-variant p-stack_md rounded-lg flex flex-col gap-stack_sm hover:border-outline transition-colors">
-        <div class="flex justify-between items-start">
-          <span id="metric-rate-label" class="text-label-md font-label text-on-surface-variant uppercase tracking-wider">Logs / val</span>
-          <span class="material-symbols-outlined text-on-surface-variant text-[20px]">speed</span>
-        </div>
-        <div id="metric-rate-value" class="text-headline-lg font-data-mono text-primary">—</div>
-        <div class="mt-auto">
-          <span id="metric-rate-badge" class="px-2.5 py-0.5 rounded-full text-[10px] font-bold font-label bg-secondary-container text-on-secondary-container">Normalus</span>
-        </div>
+      <div class="panel stat col-span-12 sm:col-span-6 xl:col-span-3">
+        <div class="panel-h"><span id="metric-rate-label" data-i18n="metric_rate">Logs / val</span></div>
+        <div id="metric-rate-value" class="stat-v">—</div>
+        <svg id="metric-rate-spark" class="stat-spark" viewBox="0 0 300 44" preserveAspectRatio="none"></svg>
       </div>
-      <!-- Grėsmės -->
-      <div class="bg-surface-container-lowest border border-outline-variant p-stack_md rounded-lg flex flex-col gap-stack_sm hover:border-outline transition-colors">
-        <div class="flex justify-between items-start">
-          <span id="hero-threats-label" class="text-label-md font-label text-on-surface-variant uppercase tracking-wider">Grėsmės</span>
-          <span class="material-symbols-outlined text-error text-[20px]">gpp_maybe</span>
+      <div id="threat-panel" class="panel stat col-span-12 sm:col-span-6 xl:col-span-3">
+        <div class="panel-h">
+          <span id="hero-threats-label" data-i18n="hero_threats">Grėsmės</span>
+          <small id="hero-threats-sub" data-i18n="metric_threats_sub">Aukšto / kritinio lygio</small>
         </div>
-        <div id="hero-threats" class="text-headline-lg font-data-mono text-primary">—</div>
-        <div id="hero-threats-sub" class="mt-auto flex items-center gap-1 text-label-md font-label text-on-surface-variant">Aukšto / kritinio lygio</div>
+        <div id="hero-threats" class="stat-v">—</div>
       </div>
-    </section>
 
-    <!-- Įvykiai + Grafikas -->
-    <div class="grid grid-cols-1 lg:grid-cols-2 gap-stack_md">
+      <div class="panel col-span-12 xl:col-span-8">
+        <div class="panel-h">
+          <span id="network-activity-title" data-i18n="network_activity">Tinklo aktyvumas</span>
+          <small id="last-24h-label">Paskutinės 24 valandos</small>
+        </div>
+        <div class="panel-b">
+          <div class="chart-wrap"><canvas id="traffic-chart"></canvas></div>
+          <table class="legend-tbl">
+            <thead><tr><th></th><th data-i18n="legend_avg">Vid.</th><th data-i18n="legend_max">Maks.</th><th data-i18n="legend_last">Paskut.</th></tr></thead>
+            <tbody><tr>
+              <td><span class="legend-swatch bg-ok"></span><span data-i18n="metric_logs_series">Logai</span></td>
+              <td id="traffic-avg">—</td><td id="traffic-max">—</td><td id="traffic-last">—</td>
+            </tr></tbody>
+          </table>
+          <div id="traffic-device-stats" class="hidden mini-stats">
+            <div><small id="tds-status-label">Būsena</small><b id="tds-status">—</b></div>
+            <div><small id="tds-logs5m-label">Logai (5 min)</small><b id="tds-logs5m">—</b></div>
+            <div><small id="tds-lastseen-label">Paskutinis logas</small><b id="tds-lastseen">—</b></div>
+            <div><small id="tds-alerts-label">Įspėjimai</small><b id="tds-alerts">—</b></div>
+          </div>
+          <div class="mini-stats">
+            <div><small id="total-label" data-i18n="total">Iš viso</small><b id="chart-total">—</b></div>
+            <div><small id="peak-label" data-i18n="peak">Pikas</small><b id="chart-peak">—</b></div>
+          </div>
+        </div>
+      </div>
 
-      <!-- Svarbiausi įvykiai -->
-      <div class="bg-surface-container-lowest border border-outline-variant rounded-lg p-stack_md">
-        <div class="flex justify-between items-center mb-6">
-          <h3 id="key-events-title" class="text-headline-sm font-headline text-primary">Svarbiausi įvykiai</h3>
-          <button onclick="navigate('anomalies')"
-            class="text-on-surface-variant hover:text-primary transition-colors text-label-md font-label font-semibold flex items-center gap-1">
-            <span id="view-all-label">Žiūrėti visus</span>
+      <div class="panel col-span-12 xl:col-span-4">
+        <div class="panel-h">
+          <span data-i18n="sev_breakdown">Įvykiai pagal lygį</span>
+          <small data-i18n="last_20">paskutiniai 20</small>
+        </div>
+        <div id="sev-breakdown" class="panel-b gauge"></div>
+      </div>
+
+      <div class="panel col-span-12">
+        <div class="panel-h">
+          <span id="key-events-title" data-i18n="key_events">Svarbiausi įvykiai</span>
+          <button data-nav="anomalies" class="link-btn">
+            <span id="view-all-label" data-i18n="view_all">Žiūrėti visus</span>
             <span class="material-symbols-outlined text-[16px]">arrow_forward</span>
           </button>
         </div>
-        <div id="key-events-list" class="space-y-1">
-          <div class="skeleton h-12 mb-2"></div>
-          <div class="skeleton h-12 mb-2"></div>
-          <div class="skeleton h-12"></div>
-        </div>
-      </div>
-
-      <!-- Tinklo aktyvumas -->
-      <div class="bg-surface-container-lowest border border-outline-variant rounded-lg p-stack_md">
-        <div class="flex justify-between items-center mb-4 gap-2">
-          <div>
-            <h3 id="network-activity-title" class="text-headline-sm font-headline text-primary">Tinklo aktyvumas</h3>
-            <p id="last-24h-label" class="text-label-md font-label text-on-surface-variant uppercase tracking-wider">Paskutinės 24 valandos</p>
-          </div>
-          <select id="traffic-device-select" onchange="onTrafficDeviceChange()"
-            class="text-label-md font-label bg-surface-container-lowest border border-outline-variant rounded-lg px-3 py-1.5 outline-none focus:border-primary max-w-[200px] truncate">
-            <option value="">Visi įrenginiai</option>
-          </select>
-        </div>
-        <div class="chart-wrap">
-          <canvas id="traffic-chart"></canvas>
-        </div>
-
-        <!-- Pasirinkto įrenginio statistika -->
-        <div id="traffic-device-stats" class="hidden mt-4 pt-4 border-t border-outline-variant grid grid-cols-4 gap-3 text-center">
-          <div>
-            <div id="tds-status-label" class="text-label-md font-label text-on-surface-variant uppercase">Būsena</div>
-            <div id="tds-status" class="font-headline font-bold text-body-md">—</div>
-          </div>
-          <div>
-            <div id="tds-logs5m-label" class="text-label-md font-label text-on-surface-variant uppercase">Logai (5 min)</div>
-            <div id="tds-logs5m" class="font-headline font-bold text-body-md">—</div>
-          </div>
-          <div>
-            <div id="tds-lastseen-label" class="text-label-md font-label text-on-surface-variant uppercase">Paskutinis logas</div>
-            <div id="tds-lastseen" class="font-headline font-bold text-body-md">—</div>
-          </div>
-          <div>
-            <div id="tds-alerts-label" class="text-label-md font-label text-on-surface-variant uppercase">Įspėjimai</div>
-            <div id="tds-alerts" class="font-headline font-bold text-body-md">—</div>
-          </div>
-        </div>
-
-        <div class="mt-4 pt-4 border-t border-outline-variant flex items-center gap-6">
-          <div>
-            <div id="total-label" class="text-label-md font-label text-on-surface-variant uppercase">Iš viso</div>
-            <div id="chart-total" class="font-headline font-bold text-body-md">— įrašų</div>
-          </div>
-          <div class="h-6 w-px bg-outline-variant"></div>
-          <div>
-            <div id="peak-label" class="text-label-md font-label text-on-surface-variant uppercase">Pikas</div>
-            <div id="chart-peak" class="font-headline font-bold text-body-md">—</div>
-          </div>
+        <div class="overflow-x-auto">
+          <table class="tbl">
+            <thead><tr>
+              <th data-i18n="col_time">Laikas</th><th data-i18n="col_severity">Lygis</th><th data-i18n="col_event">Įvykis</th>
+              <th data-i18n="col_source">Šaltinis</th><th data-i18n="col_device">Įrenginys</th><th data-i18n="col_attack">ATT&amp;CK</th>
+            </tr></thead>
+            <tbody id="key-events-table"></tbody>
+          </table>
         </div>
       </div>
     </div>
@@ -326,213 +176,299 @@ tailwind.config = {
   </section>
 
   <!-- ======================== ANOMALIJOS ======================== -->
-  <section id="page-anomalies" class="page space-y-stack_lg">
+  <section id="page-anomalies" class="page">
+    <div class="grid grid-cols-12 gap-2">
 
-    <!-- Pulse grafikas (linijinis) -->
-    <div class="bg-surface-container-lowest border border-outline-variant rounded-lg p-stack_md">
-      <div class="flex justify-between items-end mb-6 gap-4 flex-wrap">
-        <div>
-          <span id="pulse-monitor-label" class="text-label-md font-label text-on-surface-variant font-bold uppercase tracking-widest mb-1 block">Tinklo monitoringas</span>
-          <h2 id="pulse-title" class="text-headline-md font-headline text-primary">Statistinis srauto pulsas</h2>
-        </div>
-        <div class="flex items-center gap-4 text-label-md font-label font-medium">
-          <span class="flex items-center gap-1.5 text-secondary">
-            <span class="w-2 h-2 bg-secondary rounded-full"></span>
-            <span id="pulse-normal-label">Normalus</span>
-          </span>
-          <span class="flex items-center gap-1.5 text-error">
-            <span class="w-2 h-2 bg-error rounded-full"></span>
-            <span id="pulse-deviation-label">Nuokrypis</span>
+      <div class="panel col-span-12">
+        <div class="panel-h">
+          <span><span id="pulse-title" data-i18n="pulse_title">Statistinis srauto pulsas</span>
+            <small id="pulse-monitor-label" data-i18n="pulse_monitor">Tinklo monitoringas</small></span>
+          <span class="flex items-center gap-3 text-[12px] font-normal text-muted">
+            <span class="flex items-center gap-1.5"><span class="app-dot bg-ok"></span><span id="pulse-normal-label" data-i18n="pulse_normal">Normalus</span></span>
+            <span class="flex items-center gap-1.5"><span class="app-dot bg-crit"></span><span id="pulse-deviation-label" data-i18n="pulse_deviation">Nuokrypis</span></span>
           </span>
         </div>
-      </div>
-      <div class="chart-wrap" style="height:300px">
-        <canvas id="pulse-chart"></canvas>
-      </div>
-      <p id="pulse-empty" class="hidden text-center text-on-surface-variant text-body-md font-label py-10">Įvykių nėra</p>
-    </div>
-
-    <!-- Įtartinų įvykių kortelės -->
-    <div id="anomaly-cards" class="grid grid-cols-1 md:grid-cols-3 gap-stack_md"></div>
-
-    <!-- Chronologija -->
-    <div class="bg-surface-container-lowest border border-outline-variant rounded-lg p-stack_md">
-      <div class="flex justify-between items-center mb-6">
-        <h2 id="chronology-title" class="text-headline-sm font-headline text-primary">Naujausia chronologija</h2>
-        <button class="text-label-md font-label font-bold text-primary hover:text-secondary transition-colors" id="view-all-chrono">Žiūrėti viską</button>
-      </div>
-      <div id="chronology-list" class="space-y-0.5"></div>
-    </div>
-
-    <!-- Visi logai (žali įrašai) -->
-    <div class="bg-surface-container-lowest border border-outline-variant rounded-lg p-stack_md">
-      <div class="flex justify-between items-center mb-4 gap-2 flex-wrap">
-        <div>
-          <h2 id="logs-title" class="text-headline-sm font-headline text-primary">Visi logai (žali įrašai)</h2>
-          <p id="logs-subtitle" class="text-label-md font-label text-on-surface-variant uppercase tracking-wider">Naujausi aptikti sistemos žurnalo įrašai</p>
-        </div>
-        <div class="flex items-center gap-2">
-          <select id="logs-host-select" onchange="onLogsHostChange()"
-            class="text-label-md font-label bg-surface-container-lowest border border-outline-variant rounded-lg px-3 py-1.5 outline-none focus:border-primary max-w-[200px] truncate">
-            <option value="">Visi įrenginiai</option>
-          </select>
-          <button id="logs-refresh-btn" onclick="loadRawLogs()" title="Atnaujinti"
-            class="inline-flex items-center justify-center w-9 h-9 rounded-lg border border-outline-variant text-on-surface-variant hover:bg-surface-container-high transition">
-            <span class="material-symbols-outlined text-[18px]">refresh</span>
-          </button>
+        <div class="panel-b">
+          <div class="chart-wrap" style="height:280px"><canvas id="pulse-chart"></canvas></div>
+          <p id="pulse-empty" class="hidden empty">Įvykių nėra</p>
         </div>
       </div>
-      <div id="logs-list" class="font-data-mono text-body-sm space-y-0.5 max-h-[420px] overflow-y-auto"></div>
-      <p id="logs-empty" class="hidden text-center text-on-surface-variant text-body-md font-label py-10">Logų nėra</p>
-    </div>
 
+      <div id="anomaly-cards" class="col-span-12 grid grid-cols-12 gap-2"></div>
+
+      <div class="panel col-span-12">
+        <div class="panel-h">
+          <span id="chronology-title" data-i18n="chronology">Naujausia chronologija</span>
+          <button id="view-all-chrono" class="link-btn">Žiūrėti viską</button>
+        </div>
+        <div class="overflow-x-auto">
+          <table class="tbl">
+            <thead><tr>
+              <th data-i18n="col_time">Laikas</th><th data-i18n="col_severity">Lygis</th><th data-i18n="col_event">Įvykis</th>
+              <th data-i18n="col_source">Šaltinis</th><th data-i18n="col_device">Įrenginys</th><th data-i18n="col_attack">ATT&amp;CK</th>
+            </tr></thead>
+            <tbody id="chronology-table"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <div class="panel col-span-12">
+        <div class="panel-h">
+          <span><span id="logs-title" data-i18n="logs_title">Visi logai (žali įrašai)</span>
+            <small id="logs-subtitle" data-i18n="logs_subtitle">Naujausi aptikti sistemos žurnalo įrašai</small></span>
+          <span class="flex items-center gap-2">
+            <select id="logs-host-select" class="input w-auto max-w-[240px]"><option value="">Visi įrenginiai</option></select>
+            <button id="logs-refresh-btn" class="btn btn-icon" data-i18n-title="logs_refresh" title="Atnaujinti">
+              <span class="material-symbols-outlined">refresh</span>
+            </button>
+          </span>
+        </div>
+        <div class="panel-b">
+          <div id="logs-list" class="logs"></div>
+          <p id="logs-empty" class="hidden empty">Logų nėra</p>
+        </div>
+      </div>
+
+    </div>
   </section>
 
   <!-- ======================== ĮRENGINIAI ======================== -->
-  <section id="page-devices" class="page space-y-stack_lg">
+  <section id="page-devices" class="page">
 
-    <div class="flex justify-between items-center gap-4 flex-wrap">
-      <h2 id="devices-page-title" class="text-headline-lg font-headline text-primary">Įrenginiai</h2>
-      <div class="flex items-center gap-stack_sm">
-        <!-- Atakų parinkiklis (demonstracijai) -->
-        <div class="relative">
-          <button id="attack-btn" onclick="toggleAttackMenu(event)"
-            class="flex items-center gap-2 px-4 py-2 bg-error text-on-error rounded-lg text-label-md font-label font-bold hover:opacity-90 transition disabled:opacity-50">
-            <span class="material-symbols-outlined text-[18px]">bug_report</span>
-            <span id="attack-btn-label">Paleisti ataką</span>
-            <span class="material-symbols-outlined text-[18px]">expand_more</span>
+    <!-- Įrenginių sąrašas (#devices) -->
+    <div id="devices-list">
+    <div class="ctl-row">
+      <div class="relative ml-auto">
+        <button id="attack-btn" class="btn btn-danger">
+          <span class="material-symbols-outlined">bug_report</span>
+          <span id="attack-btn-label">Paleisti ataką</span>
+          <span class="material-symbols-outlined">expand_more</span>
+        </button>
+        <div id="attack-menu" class="hidden menu-pop w-72">
+          <button data-attack="ssh_bruteforce" class="menu-item">
+            <span class="material-symbols-outlined text-[17px] text-crit">login</span>
+            <span id="attack-ssh-label">SSH slaptažodžių ataka</span>
           </button>
-          <div id="attack-menu" class="hidden absolute right-0 mt-1 w-72 bg-surface-container-lowest border border-outline-variant rounded-lg shadow-lg z-50 py-1">
-            <button onclick="runAttack('ssh_bruteforce')"
-              class="w-full text-left px-4 py-2 text-label-md font-label text-on-surface hover:bg-surface-container-high transition-colors flex items-center gap-2.5 leading-snug">
-              <span class="material-symbols-outlined text-[18px] text-error">login</span>
-              <span id="attack-ssh-label">SSH slaptažodžių ataka</span>
-            </button>
-            <button onclick="runAttack('firewall_spike')"
-              class="w-full text-left px-4 py-2 text-label-md font-label text-on-surface hover:bg-surface-container-high transition-colors flex items-center gap-2.5 leading-snug">
-              <span class="material-symbols-outlined text-[18px] text-error">shield</span>
-              <span id="attack-firewall-label">Ugniasienės / prievadų skenavimas</span>
-            </button>
-          </div>
+          <button data-attack="firewall_spike" class="menu-item">
+            <span class="material-symbols-outlined text-[17px] text-crit">shield</span>
+            <span id="attack-firewall-label">Ugniasienės / prievadų skenavimas</span>
+          </button>
         </div>
-        <!-- ML detektoriaus testas (pilnas scenarijus) -->
-        <button id="devices-demo-btn" onclick="runAttackDemo()"
-          class="flex items-center gap-2 px-4 py-2 bg-surface-container-lowest border border-outline-variant text-on-surface rounded-lg text-label-md font-label font-bold hover:border-outline transition disabled:opacity-50">
-          <span class="material-symbols-outlined text-[18px]">smart_toy</span>
-          <span id="devices-demo-btn-label">Testuoti ML detektorių</span>
-        </button>
-        <button id="devices-add-btn" onclick="openAddDeviceModal()"
-          class="flex items-center gap-2 px-4 py-2 bg-primary text-on-primary rounded-lg text-label-md font-label font-bold hover:opacity-90 transition">
-          <span class="material-symbols-outlined text-[18px]">add</span>
-          <span id="devices-add-btn-label">Pridėti įrenginį</span>
-        </button>
       </div>
+      <button id="devices-demo-btn" class="btn">
+        <span class="material-symbols-outlined">smart_toy</span>
+        <span id="devices-demo-btn-label">Testuoti ML detektorių</span>
+      </button>
+      <button id="devices-connect-btn" class="btn">
+        <span class="material-symbols-outlined">computer</span>
+        <span id="devices-connect-btn-label">Prijungti kompiuterį</span>
+      </button>
+      <button id="devices-add-btn" class="btn btn-primary">
+        <span class="material-symbols-outlined">add</span>
+        <span id="devices-add-btn-label">Pridėti įrenginį</span>
+      </button>
     </div>
 
-    <!-- Demonstracijos būsena -->
-    <div id="devices-demo-status" class="hidden bg-primary-container text-on-primary-container rounded-lg px-5 py-3 text-body-md font-label flex items-center gap-2">
-      <span class="material-symbols-outlined text-[18px]">info</span>
+    <div id="devices-demo-status" class="hidden banner is-info mb-2">
+      <span class="material-symbols-outlined text-[17px] text-accent">info</span>
       <span id="devices-demo-status-text"></span>
     </div>
 
-    <!-- Įrenginių žemėlapis -->
-    <div class="bg-surface-container-lowest border border-outline-variant rounded-lg p-stack_md relative">
-      <div class="flex justify-between items-center mb-4 flex-wrap gap-2">
-        <h3 id="map-title" class="text-headline-sm font-headline text-primary">Įrenginių žemėlapis</h3>
-        <div class="flex items-center gap-4 text-label-md font-label">
-          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-secondary"></span><span id="map-legend-online">Aktyvus</span></span>
-          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-outline"></span><span id="map-legend-offline">Neaktyvus</span></span>
-          <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-full bg-error"></span><span id="map-legend-alert">Su įspėjimais</span></span>
+    <div class="grid grid-cols-12 gap-2">
+      <div class="panel col-span-12 lg:col-span-9">
+        <div class="panel-h">
+          <span id="map-title">Įrenginių žemėlapis</span>
+          <span class="flex items-center gap-3 text-[12px] font-normal text-muted">
+            <span class="flex items-center gap-1.5"><span class="app-dot bg-ok"></span><span id="map-legend-online">Aktyvus</span></span>
+            <span class="flex items-center gap-1.5"><span class="app-dot"></span><span id="map-legend-offline">Neaktyvus</span></span>
+            <span class="flex items-center gap-1.5"><span class="app-dot bg-crit"></span><span id="map-legend-alert">Su įspėjimais</span></span>
+          </span>
+        </div>
+        <div class="panel-b">
+          <div id="device-map" class="w-full overflow-x-auto min-h-[320px] flex items-center justify-center">
+            <div class="skeleton h-64 w-full"></div>
+          </div>
+          <p id="device-map-empty" class="hidden empty">Įrenginių dar nėra.</p>
         </div>
       </div>
-      <div id="device-map" class="w-full overflow-x-auto min-h-[320px] flex items-center justify-center">
-        <div class="skeleton h-64 w-full rounded-lg"></div>
-      </div>
-      <p id="device-map-empty" class="hidden text-center text-on-surface-variant text-body-md font-label py-10">Įrenginių dar nėra.</p>
 
-      <!-- Suvestinė: bendras ir aktyvūs įrenginiai (kairysis apatinis kampas) -->
-      <div class="absolute left-4 bottom-4 flex gap-2">
-        <div class="bg-surface-container border border-outline-variant rounded-lg px-3 py-2 min-w-[80px]">
-          <div id="devices-total-label" class="text-label-md font-label text-on-surface-variant uppercase tracking-wider">Įrenginiai</div>
-          <div id="devices-total" class="text-headline-sm font-data-mono text-primary leading-tight">—</div>
+      <div class="col-span-12 lg:col-span-3 grid grid-cols-2 lg:grid-cols-1 lg:grid-rows-2 gap-2">
+        <div class="panel stat">
+          <div class="panel-h"><span id="devices-total-label">Įrenginiai</span></div>
+          <div id="devices-total" class="stat-v">—</div>
         </div>
-        <div class="bg-surface-container border border-outline-variant rounded-lg px-3 py-2 min-w-[80px]">
-          <div id="devices-online-label" class="text-label-md font-label text-on-surface-variant uppercase tracking-wider">Aktyvūs</div>
-          <div id="devices-online" class="text-headline-sm font-data-mono text-secondary leading-tight">—</div>
+        <div class="panel stat">
+          <div class="panel-h"><span id="devices-online-label">Aktyvūs</span></div>
+          <div id="devices-online" class="stat-v text-ok">—</div>
+        </div>
+      </div>
+
+      <div id="devices-table-wrap" class="panel col-span-12">
+        <div class="overflow-x-auto">
+          <table class="tbl">
+            <thead><tr>
+              <th id="th-name">Pavadinimas</th><th id="th-os">OS</th><th id="th-ip">IP / Hostname</th>
+              <th id="th-status">Būsena</th><th id="th-logs">Logai (5 min)</th><th id="th-lastseen">Paskutinis logas</th>
+              <th id="th-actions" class="text-right">Veiksmai</th>
+            </tr></thead>
+            <tbody id="devices-tbody">
+              <tr><td colspan="7"><div class="skeleton h-4 w-1/2 mx-auto my-4"></div></td></tr>
+            </tbody>
+          </table>
         </div>
       </div>
     </div>
+    </div>
 
-    <!-- Lentelė -->
-    <div id="devices-table-wrap" class="bg-surface-container-lowest border border-outline-variant rounded-lg overflow-hidden">
-      <div class="w-full overflow-x-auto">
-        <table class="w-full text-left border-collapse text-body-md">
-          <thead>
-            <tr class="border-b border-outline-variant bg-surface-container-lowest">
-              <th id="th-name" class="py-3 px-4 text-label-md font-label text-on-surface-variant font-medium uppercase tracking-wider">Pavadinimas</th>
-              <th id="th-os" class="py-3 px-4 text-label-md font-label text-on-surface-variant font-medium uppercase tracking-wider">OS</th>
-              <th id="th-ip" class="py-3 px-4 text-label-md font-label text-on-surface-variant font-medium uppercase tracking-wider">IP / Hostname</th>
-              <th id="th-status" class="py-3 px-4 text-label-md font-label text-on-surface-variant font-medium uppercase tracking-wider">Būsena</th>
-              <th id="th-logs" class="py-3 px-4 text-label-md font-label text-on-surface-variant font-medium uppercase tracking-wider">Logai (5 min)</th>
-              <th id="th-lastseen" class="py-3 px-4 text-label-md font-label text-on-surface-variant font-medium uppercase tracking-wider">Paskutinis logas</th>
-              <th id="th-actions" class="py-3 px-4 text-label-md font-label text-on-surface-variant font-medium uppercase tracking-wider text-right">Veiksmai</th>
-            </tr>
-          </thead>
-          <tbody id="devices-tbody" class="divide-y divide-outline-variant/50">
-            <tr><td colspan="7" class="px-4 py-8 text-center text-on-surface-variant text-body-md">
-              <div class="skeleton h-4 w-1/2 mx-auto mb-2"></div>
-              <div class="skeleton h-4 w-1/3 mx-auto"></div>
-            </td></tr>
-          </tbody>
-        </table>
+    <!-- Vieno įrenginio puslapis (#devices/<raktas>) -->
+    <div id="device-detail" class="hidden">
+      <div class="ctl-row">
+        <button data-dd-back class="btn">
+          <span class="material-symbols-outlined">arrow_back</span>
+          <span data-i18n="dd_back">Įrenginiai</span>
+        </button>
+        <span id="dd-dot" class="app-dot"></span>
+        <h2 id="dd-name" class="dd-title">—</h2>
+        <span id="dd-meta" class="text-muted text-[12px]"></span>
+        <span id="dd-updated" class="ml-auto text-[12px] text-muted"></span>
+      </div>
+
+      <div id="dd-notfound" class="hidden panel">
+        <p class="empty" data-i18n="dd_not_found">Įrenginys nerastas.</p>
+        <div class="flex justify-center pb-4">
+          <button data-dd-back class="btn"><span class="material-symbols-outlined">arrow_back</span><span data-i18n="dd_back">Įrenginiai</span></button>
+        </div>
+      </div>
+
+      <div id="dd-body" class="grid grid-cols-12 gap-2">
+        <div id="dd-nostatus" class="hidden banner is-info col-span-12">
+          <span class="material-symbols-outlined text-[17px] text-accent">info</span>
+          <span id="dd-nostatus-text"></span>
+        </div>
+
+        <div class="panel stat dd-tile col-span-12 sm:col-span-6 xl:col-span-3">
+          <div class="panel-h"><span data-i18n="dd_uptime">Veikia</span></div>
+          <div id="dd-uptime" class="stat-v">—</div>
+        </div>
+        <div class="panel stat dd-tile col-span-12 sm:col-span-6 xl:col-span-3">
+          <div class="panel-h"><span data-i18n="dd_cpu">CPU</span><small id="dd-cpu-sub"></small></div>
+          <div id="dd-cpu" class="stat-v">—</div>
+          <svg id="dd-cpu-spark" class="stat-spark" viewBox="0 0 300 44" preserveAspectRatio="none"></svg>
+        </div>
+        <div class="panel stat dd-tile col-span-12 sm:col-span-6 xl:col-span-3">
+          <div class="panel-h"><span data-i18n="dd_memory">Atmintis</span><small id="dd-mem-sub"></small></div>
+          <div id="dd-mem" class="stat-v">—</div>
+          <svg id="dd-mem-spark" class="stat-spark" viewBox="0 0 300 44" preserveAspectRatio="none"></svg>
+        </div>
+        <div class="panel stat dd-tile col-span-12 sm:col-span-6 xl:col-span-3">
+          <div class="panel-h"><span data-i18n="dd_disk">Diskas (/)</span><small id="dd-disk-sub"></small></div>
+          <div id="dd-disk" class="stat-v">—</div>
+        </div>
+
+        <div class="panel col-span-12 xl:col-span-7">
+          <div class="panel-h"><span data-i18n="dd_programs">Veikiančios programos</span><small id="dd-programs-foot"></small></div>
+          <div class="panel-b overflow-x-auto">
+            <table class="tbl">
+              <thead><tr>
+                <th data-i18n="dd_program">Programa</th>
+                <th class="text-right" data-i18n="dd_processes">Procesai</th>
+                <th class="text-right"><button id="dd-sort-cpu" class="link-btn" data-i18n="dd_cpu">CPU</button></th>
+                <th class="text-right"><button id="dd-sort-mem" class="link-btn" data-i18n="dd_memory">Atmintis</button></th>
+              </tr></thead>
+              <tbody id="dd-programs-tbody"></tbody>
+            </table>
+          </div>
+        </div>
+
+        <div class="panel col-span-12 xl:col-span-5">
+          <div class="panel-h"><span data-i18n="dd_info">Įrenginio informacija</span></div>
+          <dl id="dd-info" class="panel-b kv"></dl>
+        </div>
+
+        <div class="panel col-span-12 xl:col-span-7">
+          <div class="panel-h">
+            <span class="flex items-center gap-1">
+              <button id="dd-tab-actions" class="dd-tab is-active" data-i18n="dd_tab_actions">Veiksmai</button>
+              <button id="dd-tab-logs" class="dd-tab" data-i18n="dd_tab_logs">Visi logai</button>
+            </span>
+            <small data-i18n="dd_last_24h">Paskutinės 24 val.</small>
+          </div>
+          <div class="panel-b">
+            <div id="dd-activity" class="dd-feed"></div>
+            <div id="dd-logs" class="hidden logs"></div>
+          </div>
+        </div>
+
+        <div class="panel col-span-12 xl:col-span-5">
+          <div class="panel-h"><span data-i18n="dd_alerts">Šio įrenginio įspėjimai</span></div>
+          <div class="panel-b overflow-x-auto">
+            <table class="tbl"><tbody id="dd-alerts-tbody"></tbody></table>
+          </div>
+        </div>
       </div>
     </div>
 
   </section>
 
   <!-- ======================== PRANEŠIMAI ======================== -->
-  <section id="page-messages" class="page space-y-stack_lg">
-    <header>
-      <h2 id="messages-page-title" class="text-headline-lg font-headline text-primary mb-1">Pranešimų nustatymai</h2>
-      <p id="messages-desc" class="text-body-md font-body text-on-surface-variant">Siųskite naujus įspėjimus į webhook kanalą (Slack, Discord, Telegram ir kt.).</p>
-    </header>
+  <section id="page-messages" class="page">
+    <div class="panel max-w-2xl">
+      <div class="panel-h"><span id="messages-page-title">Pranešimų nustatymai</span></div>
+      <div class="panel-b space-y-4">
+        <p id="messages-desc" class="text-muted">Siųskite naujus įspėjimus į webhook kanalą (Slack, Discord, Telegram ir kt.).</p>
 
-    <div class="bg-surface-container-lowest border border-outline-variant rounded-lg p-stack_md max-w-2xl space-y-6">
-      <!-- Įjungimas -->
-      <label class="flex items-center justify-between gap-4 cursor-pointer">
-        <span>
-          <span id="notify-enabled-label" class="text-body-md font-body font-semibold text-on-surface block">Įjungti pranešimus</span>
-          <span id="notify-enabled-hint" class="text-label-md font-label text-on-surface-variant">Aptikus naują anomaliją, ji siunčiama į webhook</span>
-        </span>
-        <input id="notify-enabled" type="checkbox" class="h-5 w-5 accent-secondary shrink-0">
-      </label>
+        <label class="flex items-center justify-between gap-4 cursor-pointer">
+          <span>
+            <span id="notify-enabled-label" class="block font-medium text-strong">Įjungti pranešimus</span>
+            <span id="notify-enabled-hint" class="text-[12px] text-muted">Aptikus naują anomaliją, ji siunčiama į webhook</span>
+          </span>
+          <input id="notify-enabled" type="checkbox" class="switch">
+        </label>
 
-      <!-- Webhook URL -->
-      <div>
-        <label id="notify-webhook-label" for="notify-webhook" class="block text-label-md font-label font-bold uppercase tracking-wider text-on-surface-variant mb-1.5">Webhook URL</label>
-        <input id="notify-webhook" type="url" autocomplete="off" placeholder="https://hooks.slack.com/services/..."
-          class="w-full px-4 py-2.5 bg-surface-container-lowest rounded-lg border border-outline-variant focus:border-primary focus:ring-0 text-body-md font-data-mono outline-none">
+        <div>
+          <label id="notify-webhook-label" for="notify-webhook" class="lbl">Webhook URL</label>
+          <input id="notify-webhook" type="url" autocomplete="off" placeholder="https://hooks.slack.com/services/..." class="input mono">
+        </div>
+
+        <div>
+          <label id="notify-severity-label" for="notify-min-severity" class="lbl">Minimalus sunkumas</label>
+          <select id="notify-min-severity" class="input">
+            <option id="notify-sev-low" value="low">Žemas</option>
+            <option id="notify-sev-medium" value="medium">Vidutinis</option>
+            <option id="notify-sev-high" value="high">Aukštas</option>
+            <option id="notify-sev-critical" value="critical">Kritinis</option>
+          </select>
+        </div>
+
+        <div class="flex items-center gap-2 flex-wrap">
+          <button id="notify-save-btn" class="btn btn-primary">Išsaugoti</button>
+          <button id="notify-test-btn" class="btn">Siųsti testą</button>
+          <span id="notify-status" class="text-[12.5px]"></span>
+        </div>
       </div>
+    </div>
+  </section>
 
-      <!-- Minimalus sunkumas -->
-      <div>
-        <label id="notify-severity-label" for="notify-min-severity" class="block text-label-md font-label font-bold uppercase tracking-wider text-on-surface-variant mb-1.5">Minimalus sunkumas</label>
-        <select id="notify-min-severity"
-          class="w-full px-4 py-2.5 bg-surface-container-lowest rounded-lg border border-outline-variant focus:border-primary focus:ring-0 text-body-md outline-none">
-          <option id="notify-sev-low" value="low">Žemas</option>
-          <option id="notify-sev-medium" value="medium">Vidutinis</option>
-          <option id="notify-sev-high" value="high">Aukštas</option>
-          <option id="notify-sev-critical" value="critical">Kritinis</option>
-        </select>
-      </div>
+  <!-- ======================== ATT&CK APRĖPTIS ======================== -->
+  <section id="page-attack" class="page">
+    <div id="attack-unavailable" class="hidden banner is-info mb-2"></div>
 
-      <!-- Veiksmai -->
-      <div class="flex items-center gap-3 pt-1 flex-wrap">
-        <button id="notify-save-btn" onclick="saveNotificationSettings()"
-          class="px-5 py-2 bg-primary text-on-primary rounded-lg text-label-md font-label font-bold hover:opacity-90 transition">Išsaugoti</button>
-        <button id="notify-test-btn" onclick="testNotification()"
-          class="px-5 py-2 rounded-lg text-label-md font-label font-bold border border-outline-variant text-on-surface hover:bg-surface-container-high transition">Siųsti testą</button>
-        <span id="notify-status" class="text-body-md font-label"></span>
+    <div class="grid grid-cols-12 gap-2">
+      <div id="attack-summary" class="col-span-12 grid grid-cols-12 gap-2"></div>
+
+      <div id="attack-matrix-panel" class="panel col-span-12">
+        <div class="panel-h">
+          <span id="attack-page-title">MITRE ATT&amp;CK aprėptis</span>
+          <span class="flex items-center gap-3 text-[12px] font-normal text-muted">
+            <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-ok"></span><span data-i18n="matrix_legend_detected">Aptikta</span></span>
+            <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-accent"></span><span data-i18n="matrix_legend_rule">Yra taisyklė</span></span>
+            <span class="flex items-center gap-1.5"><span class="w-2.5 h-2.5 rounded-sm bg-dim"></span><span data-i18n="matrix_legend_none">Nėra taisyklės</span></span>
+          </span>
+        </div>
+        <div class="panel-b">
+          <p id="attack-desc" class="text-muted mb-3">Kurias atakų technikas sistema geba aptikti ir kurios realiai suveikė žurnaluose.</p>
+          <div id="attack-matrix" class="attack-matrix"></div>
+        </div>
       </div>
     </div>
   </section>
@@ -541,166 +477,131 @@ tailwind.config = {
 </main>
 
 <!-- ======================== ĮRENGINIO MODALAS ======================== -->
-<div id="device-modal" class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-on-surface/40 p-4" onclick="onDeviceModalBackdrop(event)">
-  <div class="bg-surface-container-lowest border border-outline-variant rounded-2xl w-full max-w-lg overflow-hidden">
+<div id="device-modal" class="hidden dlg-backdrop">
+  <div class="dlg" role="dialog" aria-modal="true">
 
     <!-- Forma -->
     <div id="device-modal-form">
-      <div class="flex justify-between items-center px-6 py-4 border-b border-outline-variant">
-        <h3 id="device-modal-title" class="text-headline-sm font-headline text-primary">Pridėti naują įrenginį</h3>
-        <button onclick="closeDeviceModal()" class="text-on-surface-variant hover:text-on-surface transition">
-          <span class="material-symbols-outlined">close</span>
-        </button>
+      <div class="dlg-h">
+        <span id="device-modal-title">Pridėti naują įrenginį</span>
+        <button data-close="device-modal" class="btn btn-icon btn-ghost"><span class="material-symbols-outlined">close</span></button>
       </div>
-      <div class="p-6 space-y-4">
+      <div class="dlg-b space-y-3">
         <div>
-          <label id="dev-name-label" for="dev-name" class="block text-label-md font-label font-bold uppercase tracking-wider text-on-surface-variant mb-1.5">Pavadinimas</label>
-          <input id="dev-name" type="text" autocomplete="off"
-            class="w-full px-4 py-2.5 bg-surface-container-lowest rounded-lg border border-outline-variant focus:border-primary focus:ring-0 text-body-md outline-none">
+          <label id="dev-name-label" for="dev-name" class="lbl">Pavadinimas</label>
+          <input id="dev-name" type="text" autocomplete="off" class="input">
         </div>
         <div>
-          <label id="dev-ip-label" for="dev-ip" class="block text-label-md font-label font-bold uppercase tracking-wider text-on-surface-variant mb-1.5">IP adresas</label>
-          <input id="dev-ip" type="text" autocomplete="off" inputmode="decimal"
-            class="w-full px-4 py-2.5 bg-surface-container-lowest rounded-lg border border-outline-variant focus:border-primary focus:ring-0 text-body-md outline-none font-data-mono">
+          <label id="dev-ip-label" for="dev-ip" class="lbl">IP adresas</label>
+          <input id="dev-ip" type="text" autocomplete="off" inputmode="decimal" class="input mono">
         </div>
         <div>
-          <label id="dev-os-label" for="dev-os" class="block text-label-md font-label font-bold uppercase tracking-wider text-on-surface-variant mb-1.5">Operacinė sistema</label>
-          <select id="dev-os"
-            class="w-full px-4 py-2.5 bg-surface-container-lowest rounded-lg border border-outline-variant focus:border-primary focus:ring-0 text-body-md outline-none">
+          <label id="dev-os-label" for="dev-os" class="lbl">Operacinė sistema</label>
+          <select id="dev-os" class="input">
             <option id="dev-os-macos" value="macos">macOS (MacBook)</option>
             <option id="dev-os-windows" value="windows">Windows 11 (PC)</option>
           </select>
         </div>
-        <p id="dev-form-error" class="hidden text-error text-body-md font-label"></p>
+        <p id="dev-form-error" class="hidden text-crit"></p>
       </div>
-      <div class="flex justify-end gap-3 px-6 py-4 border-t border-outline-variant">
-        <button id="dev-cancel-btn" onclick="closeDeviceModal()"
-          class="px-4 py-2 rounded-lg text-label-md font-label font-bold text-on-surface-variant hover:bg-surface-container-high transition">Atšaukti</button>
-        <button id="dev-save-btn" onclick="submitAddDevice()"
-          class="px-5 py-2 bg-primary text-on-primary rounded-lg text-label-md font-label font-bold hover:opacity-90 transition disabled:opacity-50">Pridėti</button>
+      <div class="dlg-f">
+        <button id="dev-cancel-btn" data-close="device-modal" class="btn">Atšaukti</button>
+        <button id="dev-save-btn" class="btn btn-primary">Pridėti</button>
       </div>
     </div>
 
     <!-- Instrukcija -->
     <div id="device-modal-tutorial" class="hidden">
-      <div class="flex justify-between items-center px-6 py-4 border-b border-outline-variant">
-        <h3 id="device-tut-title" class="text-headline-sm font-headline text-primary flex items-center gap-2">
-          <span class="material-symbols-outlined text-secondary">check_circle</span>
+      <div class="dlg-h">
+        <span id="device-tut-title" class="flex items-center gap-2">
+          <span id="device-tut-icon" class="material-symbols-outlined text-[20px] text-ok">check_circle</span>
           <span id="device-tut-title-text">Įrenginys pridėtas</span>
-        </h3>
-        <button onclick="closeDeviceModal()" class="text-on-surface-variant hover:text-on-surface transition">
-          <span class="material-symbols-outlined">close</span>
-        </button>
+        </span>
+        <button data-close="device-modal" class="btn btn-icon btn-ghost"><span class="material-symbols-outlined">close</span></button>
       </div>
-      <div class="p-6 space-y-4 max-h-[60vh] overflow-y-auto">
-        <p id="device-tut-intro" class="text-body-md text-on-surface-variant font-body leading-relaxed"></p>
-        <ol id="device-tut-steps" class="list-decimal list-inside space-y-2 text-body-md font-body"></ol>
+      <div class="dlg-b space-y-3">
+        <p id="device-tut-intro" class="text-muted leading-relaxed"></p>
+        <div id="device-tut-os-wrap" class="hidden">
+          <label id="device-tut-os-label" for="device-tut-os" class="lbl">Operacinė sistema</label>
+          <select id="device-tut-os" class="input">
+            <option value="windows">Windows</option>
+            <option value="linux">Linux</option>
+            <option value="macos">macOS</option>
+          </select>
+        </div>
+        <ol id="device-tut-steps" class="list-decimal list-inside space-y-1.5"></ol>
         <div>
-          <div id="device-tut-code-label" class="text-label-md font-label font-bold uppercase tracking-wider text-on-surface-variant mb-1.5">Greitas testas</div>
-          <pre id="device-tut-code" class="bg-primary-container text-on-primary-container text-body-sm font-data-mono p-3 rounded-lg overflow-x-auto whitespace-pre-wrap"></pre>
+          <div id="device-tut-code-label" class="lbl">Greitas testas</div>
+          <pre id="device-tut-code" class="mono text-[12px] p-3 rounded bg-bg border border-line overflow-x-auto whitespace-pre-wrap"></pre>
         </div>
       </div>
-      <div class="flex justify-end px-6 py-4 border-t border-outline-variant">
-        <button id="dev-done-btn" onclick="closeDeviceModal()"
-          class="px-5 py-2 bg-primary text-on-primary rounded-lg text-label-md font-label font-bold hover:opacity-90 transition">Supratau</button>
+      <div class="dlg-f">
+        <button id="dev-done-btn" data-close="device-modal" class="btn btn-primary">Supratau</button>
       </div>
     </div>
 
-  </div>
-</div>
-
-<!-- ======================== ĮRENGINIO INFORMACIJOS MODALAS ======================== -->
-<div id="device-info-modal" class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-on-surface/40 p-4" onclick="onDeviceInfoBackdrop(event)">
-  <div class="bg-surface-container-lowest border border-outline-variant rounded-2xl w-full max-w-md overflow-hidden">
-    <div class="flex justify-between items-center px-6 py-4 border-b border-outline-variant">
-      <h3 class="text-headline-sm font-headline text-primary flex items-center gap-2">
-        <span id="device-info-status-dot" class="w-2.5 h-2.5 rounded-full bg-outline"></span>
-        <span id="device-info-name">—</span>
-      </h3>
-      <button onclick="closeDeviceInfo()" class="text-on-surface-variant hover:text-on-surface transition">
-        <span class="material-symbols-outlined">close</span>
-      </button>
-    </div>
-    <dl class="p-6 space-y-3 text-body-md">
-      <div class="flex justify-between gap-4"><dt id="info-status-label" class="text-on-surface-variant font-label">Būsena</dt><dd id="info-status" class="font-semibold text-right"></dd></div>
-      <div class="flex justify-between gap-4"><dt id="info-source-label" class="text-on-surface-variant font-label">Tipas</dt><dd id="info-source" class="font-semibold text-right"></dd></div>
-      <div class="flex justify-between gap-4"><dt id="info-ip-label" class="text-on-surface-variant font-label">IP adresas</dt><dd id="info-ip" class="font-data-mono text-right"></dd></div>
-      <div class="flex justify-between gap-4"><dt id="info-hostname-label" class="text-on-surface-variant font-label">Hostname</dt><dd id="info-hostname" class="font-data-mono text-right"></dd></div>
-      <div class="flex justify-between gap-4"><dt id="info-os-label" class="text-on-surface-variant font-label">Operacinė sistema</dt><dd id="info-os" class="text-right"></dd></div>
-      <div class="flex justify-between gap-4"><dt id="info-version-label" class="text-on-surface-variant font-label">Versija / branduolys</dt><dd id="info-version" class="text-right"></dd></div>
-      <div class="flex justify-between gap-4"><dt id="info-lastseen-label" class="text-on-surface-variant font-label">Paskutinis logas</dt><dd id="info-lastseen" class="text-right"></dd></div>
-      <div class="flex justify-between gap-4"><dt id="info-logs5m-label" class="text-on-surface-variant font-label">Logai (5 min)</dt><dd id="info-logs5m" class="font-semibold text-right"></dd></div>
-      <div class="flex justify-between gap-4"><dt id="info-logs1h-label" class="text-on-surface-variant font-label">Logai (1 val)</dt><dd id="info-logs1h" class="font-semibold text-right"></dd></div>
-      <div class="flex justify-between gap-4"><dt id="info-alerts-label" class="text-on-surface-variant font-label">Įspėjimai</dt><dd id="info-alerts" class="font-semibold text-right"></dd></div>
-    </dl>
   </div>
 </div>
 
 <!-- ======================== ANOMALIJOS INFORMACIJOS MODALAS ======================== -->
-<div id="alert-info-modal" class="hidden fixed inset-0 z-[60] flex items-center justify-center bg-on-surface/40 p-4" onclick="onAlertInfoBackdrop(event)">
-  <div class="bg-surface-container-lowest border border-outline-variant rounded-2xl w-full max-w-lg overflow-hidden">
-    <div class="flex justify-between items-center px-6 py-4 border-b border-outline-variant">
-      <h3 class="text-headline-sm font-headline text-primary flex items-center gap-2 min-w-0">
-        <span id="alert-info-icon-wrap" class="w-8 h-8 rounded-full flex items-center justify-center shrink-0 bg-error-container">
-          <span id="alert-info-icon" class="material-symbols-outlined text-lg text-on-error-container">warning</span>
-        </span>
+<div id="alert-info-modal" class="hidden dlg-backdrop">
+  <div class="dlg max-w-xl" role="dialog" aria-modal="true">
+    <div class="dlg-h">
+      <span class="flex items-center gap-2 min-w-0">
+        <span id="alert-info-icon" class="material-symbols-outlined text-[20px] shrink-0">warning</span>
         <span id="alert-info-title" class="truncate">—</span>
-      </h3>
-      <button onclick="closeAlertInfo()" class="text-on-surface-variant hover:text-on-surface transition shrink-0">
-        <span class="material-symbols-outlined">close</span>
-      </button>
+      </span>
+      <button data-close="alert-info-modal" class="btn btn-icon btn-ghost shrink-0"><span class="material-symbols-outlined">close</span></button>
     </div>
-    <div class="p-6 space-y-4 max-h-[70vh] overflow-y-auto">
-      <!-- Sunkumas + laikas -->
+    <div class="dlg-b space-y-4">
       <div class="flex items-center gap-3 flex-wrap">
-        <span id="alert-info-severity" class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase font-label bg-secondary-container text-on-secondary-container">—</span>
-        <span id="alert-info-time" class="text-label-md font-label text-on-surface-variant"></span>
+        <span id="alert-info-severity"></span>
+        <span id="alert-info-time" class="mono text-muted text-[12px]"></span>
       </div>
 
-      <!-- Šaltinis / metodas -->
-      <dl class="space-y-2 text-body-md">
+      <dl class="kv">
         <div id="alert-info-ip-row" class="hidden">
-          <dt id="alert-info-ip-label" class="text-on-surface-variant font-label">IP adresas</dt>
-          <dd id="alert-info-ip" class="font-data-mono text-right"></dd>
+          <dt id="alert-info-ip-label">IP adresas</dt>
+          <dd id="alert-info-ip" class="mono"></dd>
         </div>
         <div id="alert-info-host-row" class="hidden">
-          <dt id="alert-info-host-label" class="text-on-surface-variant font-label">Hostname</dt>
-          <dd id="alert-info-host" class="font-data-mono text-right break-all"></dd>
+          <dt id="alert-info-host-label">Hostname</dt>
+          <dd id="alert-info-host" class="mono break-all"></dd>
         </div>
         <div class="flex justify-between gap-4">
-          <dt id="alert-info-method-label" class="text-on-surface-variant font-label">Aptikimo metodas</dt>
-          <dd id="alert-info-method" class="text-right"></dd>
+          <dt id="alert-info-method-label">Aptikimo metodas</dt>
+          <dd id="alert-info-method"></dd>
+        </div>
+        <div id="alert-info-attack-row" class="hidden flex justify-between gap-4">
+          <dt id="alert-info-attack-label">ATT&amp;CK technikos</dt>
+          <dd id="alert-info-attack" class="flex flex-wrap gap-1 justify-end"></dd>
         </div>
       </dl>
 
-      <!-- Paaiškinimas -->
       <div>
-        <div id="alert-info-expl-label" class="text-label-md font-label font-bold uppercase tracking-wider text-on-surface-variant mb-1">Ką tai reiškia</div>
-        <p id="alert-info-expl" class="text-body-md font-body text-on-surface leading-relaxed"></p>
+        <div id="alert-info-expl-label" class="lbl">Ką tai reiškia</div>
+        <p id="alert-info-expl" class="leading-relaxed"></p>
       </div>
 
-      <!-- Rekomendacija -->
-      <div id="alert-info-rec-wrap" class="bg-surface-container rounded-lg p-3">
-        <div id="alert-info-rec-label" class="text-label-md font-label font-bold uppercase tracking-wider text-on-surface-variant mb-1">Rekomendacija</div>
-        <p id="alert-info-rec" class="text-body-md font-body text-on-surface leading-relaxed"></p>
+      <div id="alert-info-rec-wrap" class="banner is-info block">
+        <div id="alert-info-rec-label" class="lbl">Rekomendacija</div>
+        <p id="alert-info-rec" class="leading-relaxed"></p>
       </div>
 
-      <!-- Techninė informacija -->
       <div id="alert-info-details-wrap">
-        <div id="alert-info-details-label" class="text-label-md font-label font-bold uppercase tracking-wider text-on-surface-variant mb-1">Techninė informacija</div>
-        <dl id="alert-info-details" class="text-body-md"></dl>
+        <div id="alert-info-details-label" class="lbl">Techninė informacija</div>
+        <dl id="alert-info-details" class="kv"></dl>
       </div>
 
-      <!-- Žali log įrašai, sukėlę įspėjimą -->
       <div id="alert-info-raw-wrap">
-        <div id="alert-info-raw-label" class="text-label-md font-label font-bold uppercase tracking-wider text-on-surface-variant mb-1">Žali log įrašai</div>
-        <pre id="alert-info-raw" class="bg-inverse-surface text-inverse-on-surface text-body-sm font-data-mono p-3 rounded-lg overflow-x-auto whitespace-pre-wrap break-all max-h-60 overflow-y-auto"></pre>
+        <div id="alert-info-raw-label" class="lbl">Žali log įrašai</div>
+        <pre id="alert-info-raw" class="mono text-[12px] p-3 rounded bg-bg border border-line overflow-x-auto whitespace-pre-wrap break-all max-h-60 overflow-y-auto"></pre>
       </div>
     </div>
   </div>
 </div>
 
 <script src="/static/js/chart.min.js"></script>
-<script src="/static/js/app.js"></script>
+<script type="module" src="/static/js/main.js"></script>
 </body>
 </html>

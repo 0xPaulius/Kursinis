@@ -1,0 +1,60 @@
+////////////////////////////////////////////////////////////////////
+// Galinių įrenginių (endpoint) žurnalų priėmimo šliuzas
+// docker compose --profile endpoints up -d
+//
+// Endpoint'ų Alloy agentai (Windows: Security, Sysmon, PowerShell) siunčia
+// Loki push API į :3500 per TLS su kliento sertifikatu (mTLS). Pats Loki lieka
+// vidiniame tinkle.
+//
+// client_ca_file yra ne CA, o leidžiamų kliento sertifikatų sąrašas (clients.pem):
+// priimami tik jame esantys sertifikatai, net ir tos pačios CA pasirašytas, bet
+// neįtrauktas atmetamas TLS lygyje. Atšaukimas = tools/gen-certs.sh revoke <vardas>.
+// Sąrašas skaitomas tik paleidžiant: docker compose restart alloy-gateway.
+// Sąrašo CN šliuzas parodo kiekvienam besijungiančiam — vardai turi būti neutralūs.
+//
+// Etikečių allowlist'as apsaugo Loki atmintį ir detektorių:
+//   - priimami tik endpoint job'ai (windows, linux_endpoint) — agentas negali
+//     „apsimesti" syslog srautu, kurį skaito taisyklės;
+//   - paliekamos tik mažo kardinalumo etiketės job, host, channel.
+// Sertifikatai: tools/gen-certs.sh
+////////////////////////////////////////////////////////////////////
+
+loki.relabel "endpoint_allowlist" {
+	forward_to = []
+
+	rule {
+		source_labels = ["job"]
+		regex         = "windows|linux_endpoint"
+		action        = "keep"
+	}
+
+	rule {
+		regex  = "job|host|channel"
+		action = "labelkeep"
+	}
+}
+
+loki.source.api "endpoints" {
+	http {
+		listen_address = "0.0.0.0"
+		listen_port    = 3500
+
+		tls {
+			cert_file        = "/etc/alloy/certs/collector.crt"
+			key_file         = "/etc/alloy/certs/collector.key"
+			client_ca_file   = "/etc/alloy/certs/clients.pem"
+			client_auth_type = "RequireAndVerifyClientCert"
+		}
+	}
+
+	// Endpoint'o įvykio laikas (ne gavimo laikas) — vertinimui ir koreliacijai.
+	use_incoming_timestamp = true
+	relabel_rules          = loki.relabel.endpoint_allowlist.rules
+	forward_to             = [loki.write.local.receiver]
+}
+
+loki.write "local" {
+	endpoint {
+		url = "http://loki:3100/loki/api/v1/push"
+	}
+}

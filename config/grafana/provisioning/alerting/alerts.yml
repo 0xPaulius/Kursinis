@@ -13,6 +13,7 @@ groups:
     rules:
 
       # ---- SSH brute-force atakos aptikimas ----
+      # Kaip detektoriaus taisyklė: ≥5 nesėkmės per 5 min iš to paties IP (ne visų IP suma).
       - uid: ssh-bruteforce-alert
         title: "SSH Brute-Force Aptiktas"
         condition: C
@@ -23,7 +24,7 @@ groups:
               to: 0
             datasourceUid: loki
             model:
-              expr: 'sum(count_over_time({job="syslog"} |= "Failed password" [5m]))'
+              expr: 'max(sum by (ip) (count_over_time({job="syslog"} |= "Failed password" | regexp `from\s+(?P<ip>\d+\.\d+\.\d+\.\d+)` | ip != "" [5m])))'
               instant: true
               refId: A
           - refId: C
@@ -31,7 +32,7 @@ groups:
             model:
               conditions:
                 - evaluator:
-                    params: [5]
+                    params: [4]
                     type: gt
                   operator:
                     type: and
@@ -43,12 +44,12 @@ groups:
               refId: C
               type: classic_conditions
         noDataState: NoData
-        execErrState: Alerting
+        execErrState: Error
         for: 2m
         labels:
           severity: high
         annotations:
-          summary: "SSH brute-force ataka aptikta — daugiau nei 5 nesėkmingi bandymai per 5 min"
+          summary: "SSH brute-force ataka aptikta — 5 ar daugiau nesėkmingų bandymų iš vieno IP per 5 min"
 
       # ---- Firewall blokavimų šuolis ----
       - uid: firewall-spike-alert
@@ -81,7 +82,7 @@ groups:
               refId: C
               type: classic_conditions
         noDataState: NoData
-        execErrState: Alerting
+        execErrState: Error
         for: 1m
         labels:
           severity: medium

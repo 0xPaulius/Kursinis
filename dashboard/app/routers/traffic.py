@@ -5,7 +5,6 @@ from __future__ import annotations
 
 import asyncio
 import datetime
-import re
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, Query
@@ -13,11 +12,9 @@ from fastapi import APIRouter, Depends, Query
 from app.models.schemas import LogLine, LogLines, TrafficCurrent, TrafficHistory, TrafficPoint
 from app.services.loki_client import AsyncLokiClient
 from app.dependencies import get_loki, require_auth
+from app.log_selectors import logs_selector, valid_host
 
 router = APIRouter(prefix="/api/traffic", tags=["traffic"], dependencies=[Depends(require_auth)])
-
-# Leistini host etiketės simboliai — apsauga nuo LogQL injekcijos per `host` parametrą.
-_HOST_RE = re.compile(r"^[A-Za-z0-9._-]{1,255}$")
 
 
 def _ns_to_iso(ts_ns: str | int) -> str:
@@ -54,22 +51,25 @@ async def get_traffic_current(
     loki: Annotated[AsyncLokiClient, Depends(get_loki)],
 ) -> TrafficCurrent:
     """Dabartinis žurnalų srautas per paskutines 5 minutes."""
-    now = datetime.datetime.now(datetime.timezone.utc)
-    start = now - datetime.timedelta(minutes=5)
-
-    lines = await loki.query_range('{job="syslog"}', start=start, end=now)
+    # Kiekius skaičiuoja Loki (metric query) — eilučių atsisiuntimas apribotas 5000.
+    series = await loki.query_instant(
+        f'sum by (job, severity) (count_over_time({logs_selector()}[5m]))')
 
     by_severity: dict[str, int] = {}
     by_job: dict[str, int] = {}
 
-    for entry in lines:
-        labels = entry.get("labels", {})
+    for item in series:
+        labels = item.get("metric", {})
+        try:
+            count = int(float(item["value"][1]))
+        except (KeyError, IndexError, ValueError, TypeError):
+            continue
         sev = labels.get("severity", "unknown")
         job = labels.get("job", "unknown")
-        by_severity[sev] = by_severity.get(sev, 0) + 1
-        by_job[job] = by_job.get(job, 0) + 1
+        by_severity[sev] = by_severity.get(sev, 0) + count
+        by_job[job] = by_job.get(job, 0) + count
 
-    total = len(lines)
+    total = sum(by_job.values())
     lpm = round(total / 5.0, 1)
 
     return TrafficCurrent(
@@ -98,9 +98,7 @@ async def get_traffic_history(
     step = _auto_step(hours)
 
     # Jei nurodytas validus host — filtruojame pagal jį; kitaip imame visą srautą.
-    selector = '{job="syslog"}'
-    if host and _HOST_RE.match(host):
-        selector = f'{{job="syslog", host="{host}"}}'
+    selector = logs_selector(host if valid_host(host) else None)
 
     results = await loki.query_metric(
         f'sum(count_over_time({selector}[{step}]))',
@@ -159,9 +157,7 @@ async def get_traffic_logs(
     now = datetime.datetime.now(datetime.timezone.utc)
     start = now - datetime.timedelta(hours=hours)
 
-    selector = '{job="syslog"}'
-    if host and _HOST_RE.match(host):
-        selector = f'{{job="syslog", host="{host}"}}'
+    selector = logs_selector(host if valid_host(host) else None)
 
     entries = await loki.query_range(selector, start=start, end=now, limit=limit)
 

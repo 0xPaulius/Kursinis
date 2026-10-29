@@ -20,34 +20,6 @@
   src: url(/static/fonts/3604d9d4.woff2) format('woff2');
 }
 @font-face {
-  font-family: 'Manrope';
-  font-style: normal;
-  font-weight: 400;
-  font-display: swap;
-  src: url(/static/fonts/c9919a9d.woff2) format('woff2');
-}
-@font-face {
-  font-family: 'Manrope';
-  font-style: normal;
-  font-weight: 600;
-  font-display: swap;
-  src: url(/static/fonts/bef4eca9.woff2) format('woff2');
-}
-@font-face {
-  font-family: 'Manrope';
-  font-style: normal;
-  font-weight: 700;
-  font-display: swap;
-  src: url(/static/fonts/8ad91a3a.woff2) format('woff2');
-}
-@font-face {
-  font-family: 'Manrope';
-  font-style: normal;
-  font-weight: 800;
-  font-display: swap;
-  src: url(/static/fonts/7872ab96.woff2) format('woff2');
-}
-@font-face {
   font-family: 'Material Symbols Outlined';
   font-style: normal;
   font-weight: 100;

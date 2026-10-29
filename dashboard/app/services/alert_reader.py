@@ -80,6 +80,148 @@ _TRANSLATIONS: dict[str, dict[str, str]] = {
             "Esant problemoms — kreipkitės į IT specialistą."
         ),
     },
+    # --- Windows galinių įrenginių (endpoint) įspėjimai ---
+    "win_failed_logon_bruteforce": {
+        "title": "Windows: slaptažodžių spėjimo ataka",
+        "explanation": (
+            "Iš vieno adreso daug nesėkmingų Windows prisijungimų (įvykis 4625). "
+            "Tai gali būti bandymas atspėti slaptažodį."
+        ),
+        "recommendation": (
+            "Rekomenduojama: patikrinkite nurodytą IP ir, jei jis nepatikimas, "
+            "blokuokite jį ir peržiūrėkite paskyrų saugumą."
+        ),
+    },
+    "win_password_spray": {
+        "title": "Windows: slaptažodžių purškimas",
+        "explanation": (
+            "Iš vieno adreso bandyta jungtis prie daugelio skirtingų paskyrų. "
+            "Būdinga slaptažodžių purškimo (password spraying) atakai."
+        ),
+        "recommendation": (
+            "Rekomenduojama: blokuokite šaltinį ir įjunkite paskyrų užrakinimo politiką."
+        ),
+    },
+    "win_account_lockout": {
+        "title": "Windows: paskyra užrakinta",
+        "explanation": (
+            "Windows paskyra užrakinta dėl daugkartinių nesėkmingų bandymų (įvykis 4740)."
+        ),
+        "recommendation": (
+            "Rekomenduojama: išsiaiškinkite, ar tai teisėtas vartotojas, ar ataka."
+        ),
+    },
+    "win_account_created": {
+        "title": "Windows: sukurta nauja paskyra",
+        "explanation": (
+            "Sukurta nauja vietinė Windows paskyra (įvykis 4720). "
+            "Jei to nedarė administratorius — gali būti įsilaužimo pėdsakas."
+        ),
+        "recommendation": (
+            "Rekomenduojama: patikrinkite, ar paskyra sukurta teisėtai."
+        ),
+    },
+    "win_admin_group_add": {
+        "title": "Windows: narys įtrauktas į administratorius",
+        "explanation": (
+            "Vartotojas įtrauktas į lokalių administratorių grupę (įvykis 4732). "
+            "Tai teisių eskalavimo požymis."
+        ),
+        "recommendation": (
+            "Rekomenduojama: skubiai patikrinkite, ar pakeitimas autorizuotas."
+        ),
+    },
+    "win_audit_log_cleared": {
+        "title": "Windows: išvalytas saugumo žurnalas",
+        "explanation": (
+            "Išvalytas Windows saugumo audito žurnalas (įvykis 1102). "
+            "Užpuolikai taip slepia pėdsakus."
+        ),
+        "recommendation": (
+            "Rekomenduojama: traktuokite kaip galimą incidentą ir ištirkite įrenginį."
+        ),
+    },
+    "win_suspicious_powershell": {
+        "title": "Windows: įtartinas PowerShell scenarijus",
+        "explanation": (
+            "Įvykdytas PowerShell scenarijus su įtartinais požymiais (įvykis 4104), "
+            "pvz. kodo parsisiuntimas ar užmaskavimas."
+        ),
+        "recommendation": (
+            "Rekomenduojama: peržiūrėkite scenarijų ir izoliuokite įrenginį, jei kenkėjiškas."
+        ),
+    },
+    "win_discovery_burst": {
+        "title": "Windows: žvalgybos komandų serija",
+        "explanation": (
+            "Per trumpą laiką paleista daug sistemos žvalgybos komandų "
+            "(whoami, net, ipconfig ir pan.) — būdinga po įsilaužimo."
+        ),
+        "recommendation": (
+            "Rekomenduojama: patikrinkite, kas vykdė komandas šiame įrenginyje."
+        ),
+    },
+    "win_lolbin_network": {
+        "title": "Windows: sistemos įrankis jungiasi į internetą",
+        "explanation": (
+            "Legitimus Windows įrankis (pvz. rundll32, certutil) jungėsi į išorinį adresą. "
+            "Taip dažnai parsiunčiami kenkėjiški įrankiai."
+        ),
+        "recommendation": (
+            "Rekomenduojama: patikrinkite paskirties adresą ir procesą."
+        ),
+    },
+    "win_startup_persistence": {
+        "title": "Windows: failas įrašytas į paleisties aplanką",
+        "explanation": (
+            "Į automatinės paleisties (Startup) aplanką įrašytas failas — "
+            "taip kenkėjiška programa užsitikrina paleidimą po perkrovimo."
+        ),
+        "recommendation": (
+            "Rekomenduojama: patikrinkite failą ir pašalinkite, jei neatpažįstamas."
+        ),
+    },
+    # --- Linux galinių įrenginių (auditd) įspėjimai ---
+    "linux_sudo_auth_failure": {
+        "title": "Linux: nesėkmingi sudo bandymai",
+        "explanation": (
+            "Kelis kartus nepavyko gauti administratoriaus teisių (sudo/su). "
+            "Gali būti bandymas išsikelti teises."
+        ),
+        "recommendation": (
+            "Rekomenduojama: patikrinkite, ar tai darė pats vartotojas."
+        ),
+    },
+    "linux_account_created": {
+        "title": "Linux: sukurta nauja paskyra",
+        "explanation": (
+            "Serveryje sukurta nauja vietinė paskyra. "
+            "Jei to nedarė administratorius — gali būti įsilaužimo pėdsakas."
+        ),
+        "recommendation": (
+            "Rekomenduojama: patikrinkite, ar paskyra sukurta teisėtai."
+        ),
+    },
+    "linux_suspicious_execve": {
+        "title": "Linux: įtartina komanda",
+        "explanation": (
+            "Paleista komanda, būdinga nuotoliniam valdymui (pvz. interaktyvus shell "
+            "ar nc -e) — dažnas įsilaužėlio žingsnis."
+        ),
+        "recommendation": (
+            "Rekomenduojama: peržiūrėkite komandą ir izoliuokite serverį, jei ji neatpažįstama."
+        ),
+    },
+    "linux_discovery_burst": {
+        "title": "Linux: žvalgybos komandų serija",
+        "explanation": (
+            "Per trumpą laiką paleista daug sistemos žvalgybos komandų "
+            "(whoami, id, uname ir pan.) — būdinga po įsilaužimo."
+        ),
+        "recommendation": (
+            "Rekomenduojama: patikrinkite, kas vykdė komandas šiame serveryje."
+        ),
+    },
 }
 
 _DEFAULT_TRANSLATION = {
@@ -99,13 +241,18 @@ def _alert_id(raw: dict[str, Any]) -> str:
     Deterministinis ID iš pagrindinių laukų — leidžia klientui sekti "matytus"
     įspėjimus, nesikeičia tarp užklausų.
     """
-    key = "|".join([
+    parts = [
         str(raw.get("timestamp", "")),
         str(raw.get("alert_type", "")),
         str(raw.get("source_ip", "")),
         str(raw.get("source_host", "")),
-    ])
-    return hashlib.sha1(key.encode("utf-8")).hexdigest()[:16]
+    ]
+    # Vieno įvykio tapatybė (pvz. paskyra): keli to paties tipo įvykiai tame pačiame cikle.
+    # Pridedama tik esant — kitų alertų ID nesikeičia.
+    event_key = (raw.get("details") or {}).get("key")
+    if event_key:
+        parts.append(str(event_key))
+    return hashlib.sha1("|".join(parts).encode("utf-8")).hexdigest()[:16]
 
 
 def _make_alert_item(raw: dict[str, Any]) -> AlertItem:
@@ -124,6 +271,7 @@ def _make_alert_item(raw: dict[str, Any]) -> AlertItem:
         detection_method=raw.get("detection_method", ""),
         details=raw.get("details", {}),
         sample_lines=raw.get("sample_lines", []) or [],
+        attack_techniques=raw.get("attack_techniques", []) or [],
     )
 
 
