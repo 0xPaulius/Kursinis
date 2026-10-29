@@ -6,6 +6,7 @@ import { alertExpl, alertTitle, t } from "../i18n.js";
 import { ANOMALY_CARD_CFG, alertRow } from "../alert-dialog.js";
 import { filteredAlerts, updateSearchUI } from "../shell.js";
 import { applyAxes, areaFill, forget, themeOptions, token, track } from "../charts.js";
+import { LOG_SEV_COLOR } from "../format.js";
 
 // main.js duomenų įkėlimo funkcijos (puslapiai main.js neimportuoja).
 let ctx = {};
@@ -190,13 +191,6 @@ async function toggleShowAllAlerts() {
   if (state.showAllAlerts) await ctx.loadAllAlerts();
   renderAnomaliesPage();
 }
-
-// Kairiosios juostelės spalva pagal syslog lygį.
-const LOG_SEV_COLOR = {
-  emerg: "var(--crit)", alert: "var(--crit)", crit: "var(--crit)", err: "var(--crit)", error: "var(--crit)",
-  warning: "var(--warn)", warn: "var(--warn)",
-  notice: "var(--ok)", info: "var(--ok)", debug: "var(--text-dim)",
-};
 
 function onLogsHostChange() {
   const sel = el("logs-host-select");

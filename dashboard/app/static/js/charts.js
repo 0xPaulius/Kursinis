@@ -69,12 +69,12 @@ export function applyTheme() {
   }
 }
 
-export function sparkline(svg, values, color) {
+// max — skalės viršus (numatyta: didžiausia reikšmė; procentams — 100).
+export function sparkline(svg, values, color, max = Math.max(...values) || 1) {
   const NS = "http://www.w3.org/2000/svg";
   while (svg.firstChild) svg.removeChild(svg.firstChild);
   if (values.length < 2) return;
   const [, , w, h] = svg.getAttribute("viewBox").split(" ").map(Number);
-  const max = Math.max(...values) || 1;
   const pts = values.map((v, i) => `${(i * w / (values.length - 1)).toFixed(1)},${(h - h * v / max).toFixed(1)}`);
   const area = document.createElementNS(NS, "polygon");
   area.setAttribute("points", `0,${h} ${pts.join(" ")} ${w},${h}`);

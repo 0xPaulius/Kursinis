@@ -14,26 +14,39 @@ export function initNavigation(enter) {
   onEnter = enter;
   document.querySelectorAll("[data-nav]").forEach(btn =>
     btn.addEventListener("click", () => navigate(btn.dataset.nav)));
-  window.addEventListener("hashchange", () => showPage(pageFromHash()));
-  showPage(pageFromHash());
+  window.addEventListener("hashchange", () => showPage(routeFromHash()));
+  showPage(routeFromHash());
 }
 
-export function navigate(page) {
-  if (location.hash === "#" + page) showPage(page);
-  else location.hash = page;
+// route — puslapis („devices") arba įrenginys („devices/self").
+export function navigate(route) {
+  if (location.hash === "#" + route) showPage(routeFromHash());
+  else location.hash = route;
 }
 
-function pageFromHash() {
-  const page = location.hash.slice(1);
-  return PAGES.includes(page) ? page : "dashboard";
+// #puslapis arba #devices/<įrenginio raktas>.
+function routeFromHash() {
+  const [page, ...rest] = location.hash.slice(1).split("/");
+  if (!PAGES.includes(page)) return { page: "dashboard", sub: "" };
+  let sub = "";
+  if (page === "devices" && rest.length) {
+    try { sub = decodeURIComponent(rest.join("/")); } catch (_) { sub = ""; }
+  }
+  return { page, sub };
 }
 
-function showPage(page) {
+function showPage({ page, sub }) {
   document.querySelectorAll(".page").forEach(p => p.classList.toggle("active", p.id === "page-" + page));
   PAGES.forEach(p => { const b = el("nav-" + p); if (b) b.classList.toggle("active", p === page); });
   state.page = page;
-  setText("crumb-page", t("nav_" + page));
+  state.deviceKey = sub;
+  setCrumb(t("nav_" + page));
   onEnter(page);
+}
+
+// Viršutinės juostos kelias („Įrenginiai" arba „Įrenginiai › MacBook").
+export function setCrumb(text) {
+  setText("crumb-page", text);
 }
 
 // Temos jungiklis: <html data-theme>, išsaugoma naršyklėje; grafikai perpiešiami iš karto.
@@ -89,7 +102,7 @@ export function setLive(connected) {
 
 // Po kalbos perjungimo: rėmo užrašai, kurie nėra statiniai data-i18n.
 export function refreshFrameLabels() {
-  setText("crumb-page", t("nav_" + state.page));
+  setCrumb(t("nav_" + state.page));
   setLive(liveConnected);
   paintThemeButton();
 }
