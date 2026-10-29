@@ -13,6 +13,7 @@ from fastapi import APIRouter, Depends, HTTPException
 
 from app.dependencies import (
     get_alert_reader,
+    get_device_details,
     get_device_monitor,
     get_device_registry,
     get_syslog_emitter,
@@ -23,11 +24,13 @@ from app.models.schemas import (
     DemoScenarioRequest,
     Device,
     DeviceCreate,
+    DeviceDetails,
     DeviceList,
     DeviceMap,
     SimulateResponse,
 )
 from app.services.alert_reader import AlertReader
+from app.services.device_details import DeviceDetailsService, DeviceNotFound
 from app.services.device_monitor import DeviceMonitor, alert_summary
 from app.services.device_registry import DeviceRegistry
 from app.services.syslog_emitter import SyslogEmitter
@@ -57,6 +60,18 @@ async def device_map(
 ) -> DeviceMap:
     """Įrenginių žemėlapis: registruoti + savas serveris + aptikti, su gyva statistika."""
     return DeviceMap(**await monitor.build_map())
+
+
+@router.get("/{key}/details", response_model=DeviceDetails)
+async def device_details(
+    key: str,
+    service: Annotated[DeviceDetailsService, Depends(get_device_details)],
+) -> DeviceDetails:
+    """Vieno įrenginio detalės: būsena (CPU, atmintis, programos), paskutiniai veiksmai, įspėjimai."""
+    try:
+        return await service.details(key)
+    except DeviceNotFound:
+        raise HTTPException(status_code=404, detail="Įrenginys nerastas")
 
 
 @router.post("", response_model=Device, status_code=201, dependencies=[Depends(require_admin)])
