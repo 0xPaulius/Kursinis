@@ -1,4 +1,5 @@
-// Įrenginių puslapis: žemėlapis, lentelė, įrenginių langai, demonstracinės atakos.
+// Įrenginių puslapis: žemėlapis, lentelė, įrenginių langai, demonstracinės atakos;
+// #devices/<raktas> — vieno įrenginio puslapis (pages/device-detail.js).
 
 import { closeDialog, el, openDialog, setText } from "../dom.js";
 import { state } from "../state.js";
@@ -7,26 +8,22 @@ import { t } from "../i18n.js";
 import { numFmt, relTime } from "../format.js";
 import { filteredDevices, navigate } from "../shell.js";
 import { token } from "../charts.js";
+import { openDeviceDetail, renderDeviceDetail } from "./device-detail.js";
+import { deviceKey, OS_META, sourceLabel } from "./device-meta.js";
 
 // main.js duomenų įkėlimo funkcijos (puslapiai main.js neimportuoja).
 let ctx = {};
 
-const OS_META = {
-  macos:   { icon: "laptop_mac",     label: () => t("dev_os_macos") },
-  windows: { icon: "laptop_windows", label: () => t("dev_os_windows") },
-  linux:   { icon: "dns",            label: () => t("dev_os_linux") },
-  router:  { icon: "router",          label: () => t("dev_os_router") },
-  server:  { icon: "dns",             label: () => t("dev_os_server") },
-  unknown: { icon: "devices_other",  label: () => t("dev_os_unknown") },
-};
-
-const SRC_LABEL = {
-  self:       () => t("src_self"),
-  registered: () => t("src_registered"),
-  discovered: () => t("src_discovered"),
-};
-
 export function renderDevicesPage() {
+  // #devices/<raktas> — vieno įrenginio puslapis vietoje sąrašo.
+  const detail = !!state.deviceKey;
+  el("devices-list")?.classList.toggle("hidden", detail);
+  el("device-detail")?.classList.toggle("hidden", !detail);
+  if (detail) {
+    renderDeviceDetail();
+    return;
+  }
+
   const devices = state.devices;
   const online  = devices.filter(d => d.online).length;
   setText("devices-total",  String(devices.length));
@@ -137,7 +134,7 @@ function renderDeviceMap() {
     });
     nameT.textContent = name;
     g.appendChild(nameT);
-    g.addEventListener("click", () => openDeviceInfo(d));
+    g.addEventListener("click", () => openDevice(d));
     svg.appendChild(g);
   });
 
@@ -165,7 +162,7 @@ function renderDeviceTable() {
   devs.forEach(d => {
     const tr = document.createElement("tr");
     tr.className = "is-click";
-    tr.addEventListener("click", () => openDeviceInfo(d));
+    tr.addEventListener("click", () => openDevice(d));
 
     // Pavadinimas + šaltinio žyma
     const tdName = document.createElement("td");
@@ -174,7 +171,7 @@ function renderDeviceTable() {
     nm.textContent = d.name;
     const src = document.createElement("div");
     src.className = "text-[11px] text-dim";
-    src.textContent = (SRC_LABEL[d.source] || (() => d.source))();
+    src.textContent = sourceLabel(d);
     tdName.appendChild(nm);
     tdName.appendChild(src);
 
@@ -238,7 +235,7 @@ function renderDeviceTable() {
     infoIcon.className = "material-symbols-outlined";
     infoIcon.textContent = "info";
     infoBtn.appendChild(infoIcon);
-    infoBtn.addEventListener("click", () => openDeviceInfo(d));
+    infoBtn.addEventListener("click", () => openDevice(d));
     tdActions.appendChild(infoBtn);
 
     if (d.source === "registered") {
@@ -274,34 +271,14 @@ function renderDeviceTable() {
   });
 }
 
-function openDeviceInfo(d) {
-  if (!d) return;
-  if (!el("device-info-modal")) return;
-
-  setText("device-info-name", d.name);
-  const dot = el("device-info-status-dot");
-  if (dot) dot.className = "app-dot" + (d.alert_count > 0 ? " bg-crit" : d.online ? " bg-ok" : "");
-
-  setText("info-status", d.online ? t("dev_status_online") : t("dev_status_offline"));
-  setText("info-source", (SRC_LABEL[d.source] || (() => d.source))());
-  setText("info-ip", d.ip || "—");
-  setText("info-hostname", d.source === "self" ? "—" : d.hostname);
-  setText("info-os", (OS_META[d.os] || OS_META.unknown).label());
-  setText("info-version", d.os_version || "—");
-  setText("info-lastseen", d.last_seen ? relTime(d.last_seen) : t("dev_never"));
-  setText("info-logs5m", numFmt(d.logs_5m || 0));
-  setText("info-logs1h", numFmt(d.logs_1h || 0));
-  setText("info-alerts", String(d.alert_count || 0));
-
-  openDialog("device-info-modal");
+function openDevice(d) {
+  navigate(`devices/${encodeURIComponent(deviceKey(d))}`);
 }
 
-function closeDeviceInfo() {
-  closeDialog("device-info-modal");
-}
-
-function onDeviceInfoBackdrop(event) {
-  if (event.target === el("device-info-modal")) closeDeviceInfo();
+// Atidarius puslapį (main.js enterPage): įrenginio detalės kraunamos iš naujo.
+export function enterDevicesPage() {
+  if (state.deviceKey) openDeviceDetail();
+  renderDevicesPage();
 }
 
 function openAddDeviceModal() {
@@ -468,11 +445,8 @@ export function init(context) {
   el("dev-save-btn")?.addEventListener("click", submitAddDevice);
   el("device-tut-os")?.addEventListener("change", e => renderTutorial(e.target.value));
   el("device-modal")?.addEventListener("click", onDeviceModalBackdrop);
-  el("device-info-modal")?.addEventListener("click", onDeviceInfoBackdrop);
   document.querySelectorAll('[data-close="device-modal"]').forEach(btn =>
     btn.addEventListener("click", closeDeviceModal));
-  document.querySelectorAll('[data-close="device-info-modal"]').forEach(btn =>
-    btn.addEventListener("click", closeDeviceInfo));
 }
 
 export const render = renderDevicesPage;

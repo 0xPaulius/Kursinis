@@ -1,10 +1,10 @@
-// Įspėjimų lentelės eilutė ir detalių langas (naudoja apžvalgos ir anomalijų puslapiai).
+// Įspėjimų lentelės eilutė ir detalių langas (naudoja apžvalgos, anomalijų ir įrenginio puslapiai).
 
 import { closeDialog, el, openDialog, setText } from "./dom.js";
 import { alertExpl, alertRec, alertTitle, detailLabel, methodLabel, sevLabel, t } from "./i18n.js";
 import { formatDetailValue, fullTime, shortTime } from "./format.js";
 
-function sevBadge(severity) {
+export function sevBadge(severity) {
   const badge = document.createElement("span");
   badge.className = `sev-badge sev-${severity}`;
   const dot = document.createElement("i");

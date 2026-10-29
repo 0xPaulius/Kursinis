@@ -32,3 +32,14 @@ def test_module_imports_resolve():
     for module in _own_modules():
         for target in IMPORT_FROM.findall(module.read_text(encoding="utf-8")):
             assert (module.parent / target).resolve().is_file(), f"{module.name} -> {target}"
+
+
+I18N_JS = STATIC / "js" / "i18n.js"
+DATA_I18N = re.compile(r'data-i18n(?:-title|-placeholder)?="([^"]+)"')
+
+
+def test_static_labels_exist_in_both_languages():
+    lt, en = I18N_JS.read_text(encoding="utf-8").split("\n  en: {", 1)
+    for key in set(DATA_I18N.findall((STATIC / "index.html").read_text(encoding="utf-8"))):
+        key_re = re.compile(rf"^\s+{re.escape(key)}:", re.MULTILINE)
+        assert key_re.search(lt) and key_re.search(en), key

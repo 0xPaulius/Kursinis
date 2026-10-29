@@ -19,5 +19,13 @@ export const state = {
   trafficHost:  "",
   rangeHours:   parseInt(localStorage.getItem("range_hours") || "24", 10) || 24,
   stream:       null,   // EventSource gyviems atnaujinimams
+  devicesLoaded:false,   // ar įrenginių žemėlapis jau gautas (detalių puslapio „nerastas")
+  deviceKey:    "",      // atidarytas įrenginys (#devices/<raktas>): "self" arba hostname
+  deviceDetail: null,    // /api/devices/<raktas>/details atsakymas
+  deviceDetailKey: "",   // kuriam raktui priklauso deviceDetail
+  deviceLogs:   null,    // „Visi logai" skirtukas (null — dar nekrauta)
+  deviceSort:   "cpu",   // programų rikiavimas: cpu | mem
+  deviceTab:    "actions", // veiksmų skydelio skirtukas: actions | logs
+  _lastDeviceDetail: 0,  // detalių atnaujinimo throttle žyma
   _lastHistory: 0,      // grafiko atnaujinimo throttle žyma
 };

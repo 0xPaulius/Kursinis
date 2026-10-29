@@ -9,7 +9,8 @@ import { initNavigation, initShortcuts, initTheme, navigate, refreshFrameLabels,
 import { initAlertDialog } from "./alert-dialog.js";
 import { init as initAnomalies, populateLogsHostSelect, renderAnomaliesPage, renderPulseChart, renderRawLogs } from "./pages/anomalies.js";
 import { renderAttackCoverage } from "./pages/attack.js";
-import { closeAttackMenu, init as initDevices, renderDevicesPage } from "./pages/devices.js";
+import { closeAttackMenu, enterDevicesPage, init as initDevices, renderDevicesPage } from "./pages/devices.js";
+import { init as initDeviceDetail, loadDeviceDetail, maybeRefreshDeviceDetail } from "./pages/device-detail.js";
 import { init as initNotifications, load as loadNotificationSettings } from "./pages/notifications.js";
 import { closeRangeMenu, init as initOverview, populateTrafficDeviceSelect, renderAlertPanels, renderMetrics, renderRangeMenu,
          renderTrafficChart, renderTrafficDeviceStats } from "./pages/overview.js";
@@ -59,7 +60,8 @@ function loadFailed(what, e) {
 }
 
 async function retryAll() {
-  await Promise.allSettled([loadHealth(), loadTrafficCurrent(), loadTrafficHistory(), loadAlerts(), loadDevices()]);
+  const detail = state.page === "devices" && state.deviceKey ? loadDeviceDetail() : null;
+  await Promise.allSettled([loadHealth(), loadTrafficCurrent(), loadTrafficHistory(), loadAlerts(), loadDevices(), detail]);
 }
 
 function applyAlerts(data) {
@@ -104,10 +106,11 @@ async function loadAttackCoverage() {
 function applyDevices(data) {
   state.devices = data.devices || [];
   state.collector = data.collector || null;
+  state.devicesLoaded = true;
   populateTrafficDeviceSelect();
   populateLogsHostSelect();
   renderTrafficDeviceStats();
-  if (state.page === "devices") renderDevicesPage();
+  if (state.page === "devices") { renderDevicesPage(); maybeRefreshDeviceDetail(); }
 }
 
 async function loadDevices() {
@@ -197,16 +200,6 @@ function applyI18n() {
   setText("attack-ssh-label",       t("dev_attack_ssh"));
   setText("attack-firewall-label",  t("dev_attack_firewall"));
   setText("devices-demo-btn-label", t("dev_mltest_btn"));
-  setText("info-status-label",      t("info_status_label"));
-  setText("info-source-label",      t("info_source_label"));
-  setText("info-ip-label",          t("info_ip_label"));
-  setText("info-hostname-label",    t("info_hostname_label"));
-  setText("info-os-label",          t("info_os_label"));
-  setText("info-version-label",     t("info_version_label"));
-  setText("info-lastseen-label",    t("info_lastseen_label"));
-  setText("info-logs5m-label",      t("info_logs5m_label"));
-  setText("info-logs1h-label",      t("info_logs1h_label"));
-  setText("info-alerts-label",      t("info_alerts_label"));
   setText("device-modal-title",     t("dev_modal_title"));
   setText("dev-name-label",         t("dev_name_field"));
   setText("dev-ip-label",           t("dev_ip_field"));
@@ -266,7 +259,7 @@ function maybeRefreshHistory() {
 // Ką padaryti atidarius puslapį (anksčiau — navigate()).
 function enterPage(page) {
   if (page === "anomalies") { renderAnomaliesPage(); loadRawLogs(); }
-  if (page === "devices")   renderDevicesPage();
+  if (page === "devices")   enterDevicesPage();
   if (page === "attack")    loadAttackCoverage();
   if (page === "messages")  loadNotificationSettings();
 }
@@ -305,10 +298,11 @@ async function init() {
   initTheme(() => { renderMetrics(); if (state.page === "devices") renderDevicesPage(); });
   initShortcuts(clearSearch);
 
-  const ctx = { loadTrafficHistory, loadTrafficCurrent, loadAlerts, loadAllAlerts, loadRawLogs, loadDevices };
+  const ctx = { loadTrafficHistory, loadTrafficCurrent, loadAlerts, loadAllAlerts, loadRawLogs, loadDevices, loadFailed };
   initOverview(ctx);
   initAnomalies(ctx);
   initDevices(ctx);
+  initDeviceDetail(ctx);
   initNotifications();
   initAlertDialog();
   el("lang-btn")?.addEventListener("click", toggleLang);
@@ -328,7 +322,8 @@ async function init() {
       } else if (state.page === "anomalies") {
         renderAnomaliesPage();
       } else if (state.page === "devices") {
-        renderDevicesPage();
+        if (state.deviceKey) navigate("devices");   // paieška — įrenginių sąraše
+        else renderDevicesPage();
       }
     });
   }
@@ -367,6 +362,7 @@ async function init() {
   document.addEventListener("visibilitychange", () => {
     if (document.visibilityState !== "visible") return;
     loadTrafficHistory();
+    if (state.page === "devices" && state.deviceKey) loadDeviceDetail();
     if (!state.stream || state.stream.readyState === 2) connectStream();
   });
 }
